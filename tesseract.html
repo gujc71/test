@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/6.0.0/tesseract.min.js" integrity="sha512-A0EfwPGHRuABn5Tj6XKUwAy966qF1ZLfsz2rtDriABefNTW3HYoE8v2u3ILnBlK3FTnmYnzeG1cMkwuaHmxAkw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>	
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+        #image-preview {
+            max-width: 100%;
+            margin: 10px 0;
+        }
+        #output {
+            white-space: pre-wrap;
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+	<h2>이미지에서 텍스트 추출 (Tesseract.js) - 영어 + 한글만 </h2>
+    <input type="file" id="image-input" accept="image/*">
+    <br><br>
+    
+    <img id="image-preview" src="" alt="이미지 미리보기" style="display:none; max-width: 400px;">
+    <br>
+    
+    <p><strong>OCR 진행 상태:</strong> <span id="status">대기 중...</span></p>
+    
+    <h3>추출된 텍스트:</h3>
+    <div id="output">여기에 텍스트가 표시됩니다.</div>
+
+    <script>
+        document.getElementById('image-input').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = async function() {
+                const imagePreview = document.getElementById('image-preview');
+                imagePreview.src = reader.result;
+                imagePreview.style.display = "block";
+                
+                document.getElementById('status').textContent = "OCR 처리 중...";
+                
+			    const worker = await Tesseract.createWorker('eng+kor', 1, {
+					  //corePath: '../../node_modules/tesseract.js-core',
+					  //workerPath: "/dist/worker.min.js",
+					  logger: function(m){console.log(m);}
+				});
+				//await worker.loadLanguage('kor+eng');
+				//await worker.initialize('kor+eng');					
+				await worker.setParameters({
+				  tessedit_pageseg_mode: '1',           // 자동 페이지 세그먼테이션
+				  preserve_interword_spaces: '1',        // 단어 간 공백 유지
+				  textord_force_make_prop_words: '1',   // 단어 속성 강제 적용
+				  tessedit_char_blacklist: '[]{}',      // 특정 문자 제외
+				  tessedit_enable_dict_correction: '1',  // 사전 기반 교정 활성화
+				});
+    					
+		        const ret = await worker.recognize(file);
+                document.getElementById('output').textContent = ret.data.text;
+                document.getElementById('status').textContent = "OCR 처리 완료";
+            };
+            
+            reader.readAsDataURL(file);
+        });
+		
+    </script>
+
+</body>
+</html>
