@@ -14,6 +14,7 @@
         #image-preview {
             max-width: 100%;
             margin: 10px 0;
+			display:block;
         }
         #output {
             white-space: pre-wrap;
@@ -22,6 +23,9 @@
             border-radius: 5px;
             text-align: left;
         }
+		#status{
+			color:red;
+		}
     </style>
 </head>
 <body>
@@ -43,36 +47,56 @@
             if (!file) return;
             
             const reader = new FileReader();
-            reader.onload = async function() {
+            reader.onload = function() {
                 const imagePreview = document.getElementById('image-preview');
                 imagePreview.src = reader.result;
-                imagePreview.style.display = "block";
-                
-                document.getElementById('status').textContent = "OCR 처리 중...";
-                
-			    const worker = await Tesseract.createWorker('eng+kor', 1, {
-					  //corePath: '../../node_modules/tesseract.js-core',
-					  //workerPath: "/dist/worker.min.js",
-					  logger: function(m){console.log(m);}
-				});
-				//await worker.loadLanguage('kor+eng');
-				//await worker.initialize('kor+eng');					
-				await worker.setParameters({
-				  tessedit_pageseg_mode: '1',           // 자동 페이지 세그먼테이션
-				  preserve_interword_spaces: '1',        // 단어 간 공백 유지
-				  textord_force_make_prop_words: '1',   // 단어 속성 강제 적용
-				  tessedit_char_blacklist: '[]{}',      // 특정 문자 제외
-				  tessedit_enable_dict_correction: '1',  // 사전 기반 교정 활성화
-				});
-    					
-		        const ret = await worker.recognize(file);
-                document.getElementById('output').textContent = ret.data.text;
-                document.getElementById('status').textContent = "OCR 처리 완료";
+				getText(reader.result)
             };
             
             reader.readAsDataURL(file);
         });
 		
+		document.addEventListener("paste", function (event) {
+            let items = (event.clipboardData || event.originalEvent.clipboardData).items;
+            for (let item of items) {
+                if (item.type.indexOf("image") !== -1) {
+                    let blob = item.getAsFile();
+                    let reader = new FileReader();
+                    reader.onload = function (e) {
+						const imagePreview = document.getElementById('image-preview');
+						imagePreview.src = e.target.result;
+						getText(reader.result)
+                    };
+                    reader.readAsDataURL(blob);
+                    return;
+                }
+            }
+
+        });
+		
+		async function getText(file) {
+            document.getElementById('status').textContent = "OCR 처리 중...";
+                
+			const worker = await Tesseract.createWorker('eng+kor', 1, {
+				  //corePath: '../../node_modules/tesseract.js-core',
+				  //workerPath: "/dist/worker.min.js",
+				  logger: function(m){console.log(m);}
+			});
+			//await worker.loadLanguage('kor+eng');
+			//await worker.initialize('kor+eng');					
+			await worker.setParameters({
+			  tessedit_pageseg_mode: '1',           // 자동 페이지 세그먼테이션
+			  preserve_interword_spaces: '1',        // 단어 간 공백 유지
+			  textord_force_make_prop_words: '1',   // 단어 속성 강제 적용
+			  tessedit_char_blacklist: '[]{}',      // 특정 문자 제외
+			  tessedit_enable_dict_correction: '1',  // 사전 기반 교정 활성화
+			});
+					
+			const ret = await worker.recognize(file);
+            document.getElementById('output').textContent = ret.data.text;
+            document.getElementById('status').textContent = "OCR 처리 완료";
+			
+		}
     </script>
 
 </body>
