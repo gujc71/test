@@ -462,16 +462,14 @@ body.col-resizing *{user-select:none!important}
       <div class="field">
         <label for="fProvider">Provider</label>
         <select id="fProvider">
-          <option value="builtin">Claude (built-in · no key required)</option>
-          <option value="anthropic">Anthropic · own key</option>
-          <option value="openai">OpenAI</option>
           <option value="gemini">Google Gemini</option>
-          <option value="compatible">OpenAI-compatible (in-house / local server)</option>
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
         </select>
       </div>
-      <div class="field" id="wrapBase" hidden>
+      <div class="field" id="wrapBase">
         <label for="fBase">Base URL</label>
-        <input id="fBase" placeholder="https://api.openai.com/v1" spellcheck="false">
+        <input id="fBase" placeholder="https://api.openai.com/v1/" spellcheck="false">
       </div>
       <div class="field">
         <label for="fModel">Model</label>
@@ -531,6 +529,7 @@ const store = {
 };
 const K_PROJECT = 'manualgen:project';
 const K_CONFIG  = 'manualgen:config';
+const K_MEMOS   = 'manualgen:memos';
 
 /* ══════════════════════════════════════════════════════════
    1. State
@@ -553,7 +552,7 @@ const state = {
 };
 /* `apiKey` is the one field that may stay out of storage. With saveKey off it lives only in
    this object, so closing the page takes it with it — the safer default. */
-let config = { provider:'builtin', model:'claude-sonnet-4-6', imageModel:'', apiKey:'', baseUrl:'',
+let config = { provider:'gemini', model:'gemini-3.6-flash', imageModel:'', apiKey:'', baseUrl:'',
                saveKey:false, system: DEFAULT_SYSTEM };
 
 /* What actually gets written to storage: everything except the key, unless asked. */
@@ -563,11 +562,10 @@ function persistableConfig(c){
   return out;
 }
 
-/* The AI features stay disabled until an API is registered
-   (the built-in Claude provider needs no key of its own). */
+/* The AI features stay disabled until an API is registered - every provider needs a key. */
 const AI_NOT_REGISTERED =
   'AI API is not registered. Register one first under “Register AI API” at the bottom left.';
-const aiReady = () => config.provider === 'builtin' || !!config.apiKey;
+const aiReady = () => !!config.apiKey;
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 
@@ -2716,20 +2714,20 @@ const ASK_UI = {
            hint:'The image, the note and the description just generated are sent together, and the image that comes back ' +
                 'is saved as an <b>Image</b> node under this one. The model must be able to return images.' }
 };
-/* Kept per mode so an edited note / model survives closing and reopening the dialog */
+/* Kept per mode so an edited note / model survives closing and reopening the dialog.
+   The notes also go to storage, so the last one sent comes back on the next run. */
 const askMemos  = { text: $('#askMemo').value, image: LABEL_PROMPT };
 const askModels = { text: '', image: '' };
+const saveMemos = () => store.set(K_MEMOS, JSON.stringify(askMemos));
 
 /* Models offered in the dialog. `image` marks the ones that can draw a picture rather
    than only read one - the labeling step is unusable without such a model. Whatever is
    registered under “Register AI API” is added to the list too, so a model typed there
    by hand can still be picked here. */
 const MODEL_CATALOG = {
-  builtin:   [{ id:'claude-sonnet-4-6' }],
-  anthropic: [{ id:'claude-sonnet-4-6' }],
-  openai:    [{ id:'gpt-4o' }, { id:'gpt-4o-mini' }, { id:'gpt-image-1', image:true }],
   gemini:    [{ id:'gemini-3.6-flash' }, { id:'gemini-3.6-pro' }, { id:'gemini-2.5-flash-image', image:true }],
-  compatible:[]
+  openai:    [{ id:'gpt-4o' }, { id:'gpt-4o-mini' }, { id:'gpt-image-1', image:true }],
+  anthropic: [{ id:'claude-sonnet-4-6' }]
 };
 const DRAWS = /image|dall-e/i;
 function modelChoices(mode){
@@ -2803,6 +2801,7 @@ async function runAsk(){
   const model = $('#askModel').value;
   askMemos[mode] = memo;
   askModels[mode] = model;
+  saveMemos();
   $('#askScrim').hidden = true;
   const busy = currentEditor?.busy, fab = currentEditor?.fab;
   if (busy){
@@ -2872,18 +2871,18 @@ async function callAI(node, memo, pick){
   const sys = config.system || DEFAULT_SYSTEM;
   const p = config.provider;
 
-  if (p === 'builtin' || p === 'anthropic'){
-    const headers = { 'Content-Type':'application/json' };
-    if (p === 'anthropic'){
-      headers['x-api-key'] = config.apiKey;
-      headers['anthropic-version'] = '2023-06-01';
-      headers['anthropic-dangerous-direct-browser-access'] = 'true';
-    }
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+  if (p === 'anthropic'){
+    const headers = {
+      'Content-Type':'application/json',
+      'x-api-key': config.apiKey,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    };
+    const res = await fetch(apiBase(p), {
       method:'POST', headers,
       body: JSON.stringify({
-        model: pick || (p === 'builtin' ? 'claude-sonnet-4-6' : (config.model || 'claude-sonnet-4-6')),
-        max_tokens: p === 'builtin' ? 1000 : 4096,
+        model: pick || config.model || DEF_MODEL.anthropic,
+        max_tokens: 4096,
         system: sys,
         messages: [{ role:'user', content:[
           { type:'image', source:{ type:'base64', media_type: mime, data: b64 } },
@@ -2896,8 +2895,8 @@ async function callAI(node, memo, pick){
   }
 
   if (p === 'gemini'){
-    const model = pick || config.model || 'gemini-3.6-flash';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(config.apiKey)}`;
+    const model = pick || config.model || DEF_MODEL.gemini;
+    const url = geminiURL(model);
     const res = await fetch(url, {
       method:'POST', headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify({
@@ -2910,8 +2909,8 @@ async function callAI(node, memo, pick){
     return stripFence(parts.map(x => x.text || '').join('\n'));
   }
 
-  // openai / compatible
-  const base = (p === 'openai' ? 'https://api.openai.com/v1' : (config.baseUrl || '')).replace(/\/+$/,'');
+  // openai
+  const base = apiBase(p);
   if (!base) throw new Error('Base URL is empty.');
   const res = await fetch(base + '/chat/completions', {
     method:'POST',
@@ -2980,17 +2979,18 @@ function dataUrlToBlob(dataUrl){
 async function callAIImage(node, memo, desc, pick){
   const p = config.provider;
   if (!IMAGE_CAPABLE(p))
-    throw new Error('Claude cannot return images. Register Gemini or OpenAI under “Register AI API” and pick an image model.');
+    throw new Error('Anthropic cannot return images. Register Gemini or OpenAI under “Register AI API” and pick an image model.');
 
   const { mime, b64 } = splitDataURL(node.image);
   const prompt = desc ? `${memo}\n\n--- Description ---\n${desc}` : memo;
+  logPrompt('image', p, pick || config.imageModel || config.model, IMAGE_SYSTEM, prompt);
   /* The labeling step uses its own model - the one that writes the manual usually reads
      images but cannot draw them. */
   const model = pick || config.imageModel || DEF_IMAGE_MODEL[p] || config.model || '';
   let data, text = '';
 
   if (p === 'gemini'){
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(config.apiKey)}`;
+    const url = geminiURL(model);
     const body = {
       contents:[{ role:'user', parts:[ { inline_data:{ mime_type: mime, data: b64 } }, { text: prompt } ] }],
       generationConfig: { responseModalities:['TEXT','IMAGE'] }
@@ -3002,7 +3002,7 @@ async function callAIImage(node, memo, desc, pick){
     text = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('\n');
 
   } else {
-    const base = (p === 'openai' ? 'https://api.openai.com/v1' : (config.baseUrl || '')).replace(/\/+$/,'');
+    const base = apiBase(p);
     if (!base) throw new Error('Base URL is empty.');
     if (/gpt-image|dall-e/i.test(model)){
       /* A dedicated image model takes the picture as multipart form data, not JSON */
@@ -3062,23 +3062,38 @@ async function parseRes(res){
    8. API settings screen
    ══════════════════════════════════════════════════════════ */
 const HINTS = {
-  builtin:'Works only inside a Claude artifact and needs no key. If you download this file and run it locally, pick another provider.',
-  anthropic:'Example model: claude-sonnet-4-6 · calls go straight from the browser, so be careful where the key could be exposed.',
-  openai:'Example models: gpt-4o, gpt-4o-mini · the model must accept image input. Image model: gpt-image-1.',
   gemini:'Example models: gemini-3.6-flash, gemini-3.6-pro · a plain text model cannot draw, so labeling needs an image model such as gemini-2.5-flash-image.',
-  compatible:'Uses an OpenAI-compatible endpoint. Enter the Base URL up to but not including /chat/completions. The server must allow CORS.'
+  openai:'Example models: gpt-4o, gpt-4o-mini · the model must accept image input. Image model: gpt-image-1.',
+  anthropic:'Example model: claude-sonnet-4-6 · calls go straight from the browser, so be careful where the key could be exposed.'
 };
-const DEF_MODEL = { builtin:'claude-sonnet-4-6', anthropic:'claude-sonnet-4-6', openai:'gpt-4o', gemini:'gemini-3.6-flash', compatible:'' };
+/* Picking a provider drops its stock endpoint into the Base URL box; edit it there to
+   reach a proxy or an in-house server instead. */
+const DEF_BASE = {
+  gemini:    'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
+  openai:    'https://api.openai.com/v1/',
+  anthropic: 'https://api.anthropic.com/v1/messages'
+};
+/* The registered Base URL wins; the provider default fills in when the box is empty. */
+const apiBase = p => (config.baseUrl || DEF_BASE[p] || '').trim().replace(/\/+$/,'');
+/* Gemini names the model inside the path, so swap in the model actually picked -
+   otherwise the model box in the ask dialog would have no effect. */
+function geminiURL(model){
+  const raw = (config.baseUrl || DEF_BASE.gemini).trim();
+  const seg = `/models/${encodeURIComponent(model)}:generateContent`;
+  const url = /\/models\/[^/?]*:generateContent/.test(raw)
+    ? raw.replace(/\/models\/[^/?]*:generateContent/, seg)
+    : raw.replace(/\/+$/,'') + seg;
+  return url + (url.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(config.apiKey);
+}
+const DEF_MODEL = { gemini:'gemini-3.6-flash', openai:'gpt-4o', anthropic:'claude-sonnet-4-6' };
 /* Writing the manual and re-drawing the image are different jobs: a model that reads an
    image is not necessarily able to return one, so the labeling step gets its own model.
-   Claude has no image output at all, hence the empty entries. */
-const DEF_IMAGE_MODEL = { builtin:'', anthropic:'', openai:'gpt-image-1', gemini:'gemini-2.5-flash-image', compatible:'' };
-const IMAGE_CAPABLE = p => p === 'gemini' || p === 'openai' || p === 'compatible';
+   Anthropic returns no image at all, hence its empty entry. */
+const DEF_IMAGE_MODEL = { gemini:'gemini-2.5-flash-image', openai:'gpt-image-1', anthropic:'' };
+const IMAGE_CAPABLE = p => p === 'gemini' || p === 'openai';
 
 function syncApiForm(){
   const p = $('#fProvider').value;
-  $('#wrapKey').hidden = (p === 'builtin');
-  $('#wrapBase').hidden = (p !== 'compatible');
   $('#wrapImgModel').hidden = !IMAGE_CAPABLE(p);
   $('#apiHint').textContent = HINTS[p];
 }
@@ -3087,6 +3102,7 @@ $('#fProvider').addEventListener('change', () => {
   if (!$('#fModel').value || Object.values(DEF_MODEL).includes($('#fModel').value)) $('#fModel').value = DEF_MODEL[p];
   const im = $('#fImgModel');
   if (!im.value || Object.values(DEF_IMAGE_MODEL).includes(im.value)) im.value = DEF_IMAGE_MODEL[p];
+  $('#fBase').value = DEF_BASE[p];    // every provider answers at a different endpoint
   syncApiForm();
 });
 function openApi(){
@@ -3095,7 +3111,7 @@ function openApi(){
   $('#fImgModel').value = config.imageModel || DEF_IMAGE_MODEL[config.provider];
   $('#fKey').value = config.apiKey || '';
   $('#fSaveKey').checked = !!config.saveKey;
-  $('#fBase').value = config.baseUrl || '';
+  $('#fBase').value = config.baseUrl || DEF_BASE[config.provider] || '';
   $('#fSystem').value = config.system || DEFAULT_SYSTEM;
   syncApiForm();
   $('#apiScrim').hidden = false;
@@ -3109,19 +3125,19 @@ function readApiForm(){
     imageModel: $('#fImgModel').value.trim(),
     apiKey: $('#fKey').value.trim(),
     saveKey: $('#fSaveKey').checked,
-    baseUrl: $('#fBase').value.trim(),
+    baseUrl: $('#fBase').value.trim() || DEF_BASE[$('#fProvider').value],
     system: $('#fSystem').value.trim() || DEFAULT_SYSTEM
   };
 }
 $('#apiSave').addEventListener('click', async () => {
   const next = readApiForm();
-  if (next.provider !== 'builtin' && !next.apiKey){ toast('Enter an API key.', true); return; }
-  if (next.provider === 'compatible' && !next.baseUrl){ toast('Enter a Base URL.', true); return; }
+  if (!next.apiKey){ toast('Enter an API key.', true); return; }
+  if (!next.baseUrl){ toast('Enter a Base URL.', true); return; }
   config = next;
   await store.set(K_CONFIG, JSON.stringify(persistableConfig(config)));
   paintApiState();
   $('#apiScrim').hidden = true;
-  toast(next.provider === 'builtin' || next.saveKey
+  toast(next.saveKey
     ? 'AI settings saved.'
     : 'Saved. The key is kept in memory only and clears when you leave the page.');
 });
@@ -3141,7 +3157,7 @@ $('#apiTest').addEventListener('click', async e => {
 });
 function paintApiState(){
   const el = $('#apiState');
-  const label = { builtin:'Claude built-in', anthropic:'Anthropic', openai:'OpenAI', gemini:'Gemini', compatible:'Compatible server' }[config.provider];
+  const label = { gemini:'Gemini', openai:'OpenAI', anthropic:'Anthropic' }[config.provider];
   const ready = aiReady();
   el.className = 'api-state' + (ready ? '' : ' off');
   el.textContent = ready ? `${label} · ${config.model}` : `${label} · no key`;
@@ -3596,10 +3612,24 @@ async function restore(){
          key with no flag means the user had opted into keeping it. */
       if (saved.saveKey === undefined) saved.saveKey = !!saved.apiKey;
       if (!saved.saveKey) saved.apiKey = '';
+      /* The list once held 'builtin' and 'compatible'; a config written back then falls
+         through to the closest provider still on offer. */
+      if (saved.provider === 'builtin'){ saved.provider = 'anthropic'; saved.baseUrl = ''; }
+      else if (saved.provider === 'compatible') saved.provider = 'openai';
+      if (!DEF_BASE[saved.provider]) saved.provider = 'gemini';
       config = Object.assign(config, saved);
     }
   } catch(_){}
   paintApiState();
+  /* Notes typed into the AI dialog on an earlier run */
+  try {
+    const raw = await store.get(K_MEMOS);
+    if (raw){
+      const saved = JSON.parse(raw);
+      for (const k of Object.keys(askMemos))
+        if (typeof saved[k] === 'string' && saved[k].trim()) askMemos[k] = saved[k];
+    }
+  } catch(_){}
   try {
     const raw = await store.get(K_PROJECT);
     if (raw){
