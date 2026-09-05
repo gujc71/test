@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Callout9 · Guide</title>
+<style>
+/* Tokens follow the app itself (manual-generator.html), so the guide window
+   reads as part of Callout9 rather than a page from somewhere else.
+   No web fonts and no CDN: this has to open on a machine with no network. */
+:root{
+  --paper:#eceeed;
+  --panel:#ffffff;
+  --line:#d5dbd8;
+  --line-soft:#e6eae8;
+  --ink:#182220;
+  --muted:#6c7873;
+  --accent:#0d6b5f;
+  --accent-ink:#0a4f46;
+  --accent-soft:#e2f0ec;
+  --mark:#a8432a;
+  --mark-soft:#f7e7e0;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,"D2Coding",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--sans);font-size:14.5px;line-height:1.62;-webkit-font-smoothing:antialiased;
+}
+
+/* ---------- window bar (mirrors the Preview window) ---------- */
+.bar{
+  position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;
+  padding:9px 16px;background:var(--panel);border-bottom:1px solid var(--line)
+}
+.bar .brand{font-weight:650;letter-spacing:-.01em;font-size:14px}
+.bar .brand em{font-style:normal;color:var(--accent-ink);font-family:var(--mono);font-size:11px;
+  border:1px solid var(--accent-soft);background:var(--accent-soft);padding:1px 6px;border-radius:20px;
+  margin-left:7px;vertical-align:2px}
+.bar .who{font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.bar .sp{margin-left:auto}
+.bar button{
+  font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--ink);
+  border-radius:5px;padding:5px 12px;cursor:pointer
+}
+.bar button:hover{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
+.bar button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.wrap{max-width:1000px;margin:0 auto;padding:34px 22px 60px;display:flex;flex-direction:column;gap:32px}
+
+/* ---------- masthead ---------- */
+.eyebrow{
+  font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--accent-ink);display:flex;align-items:center;gap:9px;margin:0 0 11px
+}
+.eyebrow::after{content:"";flex:1;height:1px;background:var(--line);max-width:200px}
+h1{font-size:clamp(25px,3.6vw,35px);font-weight:700;letter-spacing:-.02em;line-height:1.2;
+  margin:0 0 11px;text-wrap:balance}
+.lead{margin:0;max-width:66ch;color:var(--muted);font-size:15px}
+.lead b{color:var(--ink);font-weight:600}
+.lead code{font-family:var(--mono);font-size:13.5px}
+
+/* ---------- figure ---------- */
+figure{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  padding:24px 24px 16px;overflow-x:auto}
+figure img{display:block;width:100%;min-width:660px;height:auto}
+figcaption{margin-top:15px;padding-top:13px;border-top:1px solid var(--line-soft);
+  font-size:12.8px;color:var(--muted);text-wrap:balance}
+
+/* ---------- features ---------- */
+h2{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 14px;padding-bottom:9px;border-bottom:1px solid var(--line)}
+.feats{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.feat{background:var(--panel);padding:17px 19px 19px;display:flex;flex-direction:column;gap:7px}
+.feat h3{margin:0;font-size:14.5px;font-weight:650;letter-spacing:-.01em}
+.feat p{margin:0;font-size:13px;color:var(--muted)}
+.feat code{font-family:var(--mono);font-size:11.5px;color:var(--ink);
+  background:var(--accent-soft);border-radius:3px;padding:1px 5px;white-space:nowrap}
+/* the one feature nothing else does gets the accent the diagram uses for it */
+.feat.lead-feat{grid-column:1/-1;border-left:2px solid var(--mark)}
+.feat.lead-feat h3{color:var(--mark)}
+
+/* ---------- reference table ---------- */
+.ref{display:grid;grid-template-columns:auto 1fr;gap:9px 20px;align-items:baseline;
+  background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:19px 22px}
+.ref dt{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);white-space:nowrap}
+.ref dd{margin:0;font-size:13.2px}
+.ref kbd{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line);border-bottom-width:2px;
+  border-radius:4px;padding:1px 5px;background:var(--panel)}
+.ref .sep{color:var(--line)}
+
+@media (max-width:640px){
+  .feats{grid-template-columns:1fr}
+  .ref{grid-template-columns:1fr;gap:3px 0}
+  .ref dd{margin-bottom:9px}
+}
+@media print{
+  .bar{display:none}
+  body{background:#fff}
+}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <span class="brand">Callout<em>9</em></span>
+  <span class="who">Guide</span>
+  <span class="sp"></span>
+  <button onclick="window.close()">Close</button>
+</div>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">What it does</p>
+    <h1>From one screenshot to one manual file</h1>
+    <p class="lead">Callout9 writes software user manuals out of screen captures. Paste a screen and it becomes a node; the AI reads that screen and writes the body; the tree you arrange becomes the document's heading structure; and the whole thing leaves as <b>a single <code>.md</code> file with the pictures embedded in it</b>.</p>
+  </header>
+
+  <figure>
+    <img src="workflow.svg" alt="The four-step Callout9 workflow: pasting a screen creates an image node; the AI takes the image and a note and writes body Markdown into a text node; you arrange the tree so node depth becomes heading level; and the document builds into one Markdown file with the pictures embedded. A branch off step two asks the AI to redraw the same screenshot with red number callouts, and that picture returns to the tree as an image node.">
+
+    <figcaption>The red branch is the loop the product is named after — the AI reads the numbers out of the description it just wrote, stamps them onto the same screenshot as red callouts, and hands that picture back to the tree.</figcaption>
+  </figure>
+
+  <section>
+    <h2>Features</h2>
+    <div class="feats">
+
+      <div class="feat lead-feat">
+        <h3>Callouts drawn from your own text</h3>
+        <p>Write “① the search box, ② the date filter”, press ✦ on the text node, and the AI returns the same screenshot with those numbers marked in red. It lands as an image node right where it belongs.</p>
+      </div>
+
+      <div class="feat">
+        <h3>The tree is the outline</h3>
+        <p>Nesting is not decoration: a top-level node exports as <code>H1</code>, its child as <code>H2</code>, and headings already inside a body are pushed down to match. Drag a node and the document reorganises with it.</p>
+      </div>
+
+      <div class="feat">
+        <h3>Grounded in what is on screen</h3>
+        <p>The default instruction tells the model to use only elements it can actually see, to number procedures, and to describe input fields as a table — and never to invent a feature. You can rewrite that instruction.</p>
+      </div>
+
+      <div class="feat">
+        <h3>Bring your own model</h3>
+        <p>Claude built in with no key, or your own key on Anthropic, OpenAI or Gemini — or any OpenAI-compatible endpoint, which is how you point it at an in-house or local server.</p>
+      </div>
+
+      <div class="feat">
+        <h3>A real image editor, not a viewer</h3>
+        <p>Crop, resize, rotate, select and move a region, pencil, eraser, flood fill, colour picker, shapes and text, on the 20 familiar swatches. Right-drag swaps the two colours. 30 steps of undo.</p>
+      </div>
+
+      <div class="feat">
+        <h3>Rich text in, Markdown out</h3>
+        <p>Headings, bold, lists, quotes, inline code and colour — edited as formatted text, saved as clean Markdown. Split a node at the cursor, or merge it back into the one above.</p>
+      </div>
+
+      <div class="feat">
+        <h3>Open what you already have</h3>
+        <p>Point it at a Markdown or AsciiDoc file and it comes apart into the tree: <code>H1</code>–<code>H3</code> become nodes, and every picture in the body becomes an image node under its heading.</p>
+      </div>
+
+      <div class="feat">
+        <h3>One file goes out</h3>
+        <p><b>Build File</b> writes a single <code>.md</code> with every picture embedded — nothing to zip and no folder of assets to lose. <b>Preview</b> renders it for print or PDF.</p>
+      </div>
+
+      <div class="feat">
+        <h3>Nothing to lose and nothing to install</h3>
+        <p>Every edit is saved as you work and the whole tree comes back when you reopen. The editor ships inside the app, so it loads with no network at all — behind a corporate firewall included.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Reference</h2>
+    <dl class="ref">
+      <dt>Add</dt>
+      <dd><kbd>Ctrl</kbd>+<kbd>V</kbd> paste a screenshot <span class="sep">·</span> the image button adds one from a file <span class="sep">·</span> <kbd>＋</kbd> adds a text node</dd>
+
+      <dt>Tree</dt>
+      <dd><kbd>↑</kbd><kbd>↓</kbd> move <span class="sep">·</span> <kbd>←</kbd><kbd>→</kbd> collapse and expand <span class="sep">·</span> <kbd>F2</kbd> rename <span class="sep">·</span> <kbd>Delete</kbd> remove <span class="sep">·</span> drag to reorder</dd>
+
+      <dt>Editing</dt>
+      <dd><kbd>Ctrl</kbd>+<kbd>S</kbd> save the node <span class="sep">·</span> <kbd>Ctrl</kbd>+<kbd>Enter</kbd> send to the AI <span class="sep">·</span> <kbd>Esc</kbd> close a dialog</dd>
+
+      <dt>Layout</dt>
+      <dd>Drag the divider to resize the tree; double-click it to reset</dd>
+
+      <dt>Opens</dt>
+      <dd><code>.md</code> <code>.markdown</code> <code>.mkd</code> <code>.txt</code> <code>.adoc</code> <code>.asciidoc</code> <code>.asc</code> <code>.ad</code></dd>
+
+      <dt>Writes</dt>
+      <dd>One <code>.md</code> with embedded images <span class="sep">·</span> Preview prints to paper or PDF</dd>
+    </dl>
+  </section>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,3720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Callout9</title>
+
+
+<style>
+:root{
+  --paper:#eceeed;
+  --panel:#ffffff;
+  --line:#d5dbd8;
+  --line-soft:#e6eae8;
+  --ink:#182220;
+  --muted:#6c7873;
+  --accent:#0d6b5f;
+  --accent-ink:#0a4f46;
+  --accent-soft:#e2f0ec;
+  --danger:#a8432a;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,"D2Coding",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;
+  --r:7px;
+  --side-w:316px;      /* tree side width - dragged by the splitter */
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit;font-size:inherit;color:inherit;cursor:pointer}
+input,textarea,select{font-family:inherit;font-size:inherit;color:inherit}
+
+/* ---------- shell ---------- */
+.app{height:100vh;display:flex;flex-direction:column;gap:8px;padding:10px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r)}
+
+.topbar{
+  display:flex;align-items:center;gap:14px;padding:0 14px;height:48px;flex:0 0 auto;
+}
+.brand{font-weight:650;letter-spacing:-.01em;font-size:15px}
+.brand em{font-style:normal;color:var(--accent);font-family:var(--mono);font-size:12px;
+  border:1px solid var(--accent-soft);background:var(--accent-soft);padding:1px 6px;border-radius:20px;margin-left:8px;vertical-align:2px}
+/* opens help.html in its own window */
+.help{border:1px solid var(--line);background:#fff;border-radius:50%;width:23px;height:23px;padding:0;
+  display:grid;place-items:center;font-size:13px;font-weight:600;line-height:1;color:var(--muted);
+  margin-left:-6px;transition:background .12s,border-color .12s,color .12s}
+.help:hover{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
+.help:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.body{flex:1 1 auto;display:flex;gap:2px;min-height:0}
+.side{width:var(--side-w);flex:0 0 auto;display:flex;flex-direction:column;gap:8px;min-height:0}
+
+/* ---------- splitter (drag to resize tree / editor) ---------- */
+.splitter{
+  flex:0 0 7px;align-self:stretch;position:relative;cursor:col-resize;border-radius:4px;
+  background:transparent;transition:background .12s;touch-action:none
+}
+.splitter::before{
+  content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:3px;height:38px;border-radius:2px;background:var(--line);transition:background .12s
+}
+.splitter:hover,.splitter.dragging{background:var(--accent-soft)}
+.splitter:hover::before,.splitter.dragging::before{background:var(--accent)}
+body.col-resizing{cursor:col-resize;user-select:none}
+body.col-resizing *{user-select:none!important}
+
+/* ---------- side: generate ---------- */
+/* wraps to a second row rather than overflowing when the side panel is dragged narrow */
+.gen{padding:10px;display:flex;flex-wrap:wrap;gap:6px}
+.gen .btn{padding:7px 4px;font-size:13px}
+.btn{
+  border:1px solid var(--line);background:#fff;border-radius:5px;padding:7px 10px;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;
+  transition:background .12s,border-color .12s,color .12s;
+}
+.btn:hover{background:#f6f8f7;border-color:#c3ccc8}
+.btn:active{transform:translateY(.5px)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn.primary:hover{background:var(--accent-ink);border-color:var(--accent-ink)}
+.btn.wide{flex:1}
+.btn.sm{padding:5px 9px;font-size:13px}
+/* Looks disabled but still takes clicks, so we can say why it is unavailable */
+.btn.off,.btn.off:hover{background:#e9edec;border-color:#dde3e1;color:#5f6b67;
+  box-shadow:none;cursor:not-allowed}
+
+/* ---------- side: tree ---------- */
+.tree-panel{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
+.pane-head{
+  display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line-soft);
+  font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)
+}
+.pane-head{gap:0}
+.pane-head .count{margin-left:auto;padding-left:6px;font-variant-numeric:tabular-nums}
+/* Tree internals (rows, branches, DnD) styles are injected by tree-view.js */
+
+/* tree toolbar */
+.pane-tools{display:flex;align-items:center;gap:2px}
+.t-sep{width:1px;align-self:stretch;margin:3px 3px;background:var(--line-soft)}
+.t-btn{border:1px solid var(--line);background:#fff;border-radius:4px;width:30px;height:30px;padding:0;
+  display:grid;place-items:center;font-family:var(--sans);font-size:13px;line-height:1;color:var(--muted)}
+.t-btn:hover:not(:disabled){background:#f2f5f4;border-color:#c3ccc8;color:var(--accent-ink)}
+.t-btn:disabled{opacity:.35;cursor:not-allowed}
+.t-btn svg{display:block}
+
+/* ---------- side: api ---------- */
+.api{padding:10px}
+.api .btn{width:100%}
+.api-state{display:block;margin-top:7px;font-family:var(--mono);font-size:10.5px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
+.api-state.off{color:var(--danger)}
+
+/* ---------- editor ---------- */
+.main{flex:1 1 auto;display:flex;flex-direction:column;min-width:0}
+.ed-head{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line-soft);min-height:42px}
+.ed-title{font-family:var(--mono);font-size:12.5px;font-weight:600}
+.ed-kind{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:1px 7px}
+.ed-actions{margin-left:auto;display:flex;align-items:center;gap:7px}
+.dirty{font-family:var(--mono);font-size:11px;color:var(--danger)}
+.dirty.saved{color:var(--muted)}
+.ed-body{flex:1 1 auto;min-height:0;position:relative;overflow:auto}
+
+.blank{height:100%;display:grid;place-content:center;justify-items:center;gap:10px;color:var(--muted);text-align:center;padding:24px}
+.blank .big{font-size:15px;color:var(--ink);font-weight:600}
+.blank kbd{font-family:var(--mono);font-size:12px;border:1px solid var(--line);border-bottom-width:2px;
+  border-radius:4px;padding:2px 7px;background:#f7f9f8;color:var(--ink)}
+/* the workflow drawing under the empty-state copy — capped by height so a short
+   window shrinks it instead of pushing the text out of view */
+.blank img{width:100%;max-width:620px;max-height:46vh;height:auto;object-fit:contain;margin-top:60px}
+
+/* image view — the editor is filled in by image-editor.js */
+.imgwrap{position:relative;height:100%;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+
+/* lexical editor / HTML source textarea */
+.lex-toolbar{display:flex;flex-wrap:wrap;gap:4px;padding:6px 8px;border-bottom:1px solid var(--line-soft);
+  position:sticky;top:0;background:#fff;z-index:2}
+.tb{border:1px solid transparent;background:none;border-radius:4px;padding:4px 8px;font-size:12.5px;color:var(--muted);
+  font-family:var(--mono);min-width:30px}
+.tb:hover{background:#f2f5f4;color:var(--ink);border-color:var(--line-soft)}
+.tb b{font-weight:800}
+.tb svg{display:block;width:15px;height:15px}
+.tb-sep{width:1px;background:var(--line-soft);margin:4px 3px}
+.tb-select{border:1px solid var(--line-soft);background:#fff;border-radius:4px;padding:3px 6px;
+  font-family:var(--mono);font-size:12.5px;color:var(--ink);cursor:pointer}
+.tb-select:hover{background:#f2f5f4}
+/* toolbar dropdown that shows an icon per option (a native <select> cannot) */
+.tb-pick{position:relative;display:inline-flex}
+.tb-pick svg{display:block;width:15px;height:15px;flex:none}
+.tb-pick .ico{display:flex;color:var(--muted)}
+.tb-pick-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-soft);background:#fff;
+  border-radius:4px;padding:3px 5px 3px 7px;font-family:var(--mono);font-size:12.5px;color:var(--ink);cursor:pointer}
+.tb-pick-btn:hover{background:#f2f5f4}
+.tb-pick-btn:hover .ico,.tb-pick-opt:hover .ico{color:var(--ink)}
+.tb-pick-btn .lbl{min-width:50px;text-align:left}
+.tb-pick-btn .caret{font-size:9px;color:var(--muted);line-height:1}
+.tb-pick-menu{position:absolute;top:calc(100% + 4px);left:0;z-index:20;min-width:136px;padding:4px;
+  background:#fff;border:1px solid var(--line);border-radius:6px;box-shadow:0 10px 26px rgba(0,0,0,.14)}
+.tb-pick-menu[hidden]{display:none}
+.tb-pick-opt{display:flex;align-items:center;gap:8px;width:100%;border:0;border-radius:4px;background:none;
+  padding:5px 8px;font-family:var(--mono);font-size:12.5px;color:var(--ink);text-align:left;cursor:pointer}
+.tb-pick-opt:hover{background:#f2f5f4}
+.tb-pick-opt.on{background:var(--accent-soft);color:var(--accent-ink)}
+.tb-pick-opt.on .ico{color:var(--accent-ink)}
+.tb-color{position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:2px;
+  border:1px solid transparent;border-radius:4px;padding:3px 7px;cursor:pointer;
+  font-family:var(--mono);font-size:12.5px;line-height:1;color:var(--muted)}
+.tb-color:hover{background:#f2f5f4;color:var(--ink);border-color:var(--line-soft)}
+.tb-color .swatch{width:16px;height:4px;border-radius:1px;border:1px solid var(--line-soft)}
+.tb-color input{position:absolute;inset:0;width:100%;height:100%;opacity:0;padding:0;border:0;cursor:pointer}
+.tb-color:has(input:disabled){opacity:.35;pointer-events:none}
+.editor-shell{padding:0}
+.lex-input,.md-input{
+  min-height:calc(100% - 40px);padding:22px 26px;outline:none;
+  font-size:14.5px;line-height:1.75;caret-color:var(--accent);
+}
+.md-input{width:100%;border:none;resize:none;font-family:var(--mono);font-size:13px;display:block;min-height:400px}
+/* Explicit so the hidden attribute isn't overridden by the display rules above (hides the source textarea in edit mode) */
+.lex-input[hidden],.md-input[hidden]{display:none}
+.lex-input h1{font-size:22px;margin:.7em 0 .35em;font-weight:700}
+.lex-input h2{font-size:18px;margin:.9em 0 .3em;font-weight:700}
+.lex-input h3{font-size:15.5px;margin:.9em 0 .3em;font-weight:700}
+.lex-input h4{font-size:15px;margin:.9em 0 .3em;font-weight:700}
+.lex-input h5{font-size:14px;margin:.9em 0 .3em;font-weight:700}
+.lex-input h6{font-size:13px;margin:.9em 0 .3em;font-weight:700;color:var(--muted)}
+.lex-input p{margin:.45em 0}
+.lex-input ul,.lex-input ol{margin:.45em 0;padding-left:1.5em}
+.lex-input li{margin:.15em 0}
+.lex-input blockquote{margin:.7em 0;padding:.4em 12px .4em 14px;border-left:3px solid var(--accent);
+  border-radius:0 4px 4px 0;background:var(--accent-soft);color:var(--accent-ink);font-style:italic}
+.lex-input blockquote p{margin:.2em 0}
+.lex-input code{font-family:var(--mono);font-size:12.5px;background:#fbeee9;border:1px solid #efd3c6;
+  border-radius:3px;padding:1px 4px;color:#a8442a}
+.lex-input pre code{background:none;border:none;padding:0;color:inherit}
+.lex-input pre{font-family:var(--mono);font-size:12.5px;background:#f7f9f8;border:1px solid var(--line-soft);
+  border-radius:5px;padding:12px 14px;overflow:auto;white-space:pre-wrap}
+.lex-input a{color:var(--accent);text-decoration:underline}
+.lex-input .b{font-weight:700}
+.lex-input .i{font-style:italic}
+.lex-input .s{text-decoration:line-through}
+.lex-input .u{text-decoration:underline}
+.lex-input table{border-collapse:collapse;margin:.7em 0;font-size:13.5px}
+.lex-input th,.lex-input td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}
+.lex-input th{background:#f5f8f7;font-weight:650}
+.tb.on{background:var(--accent-soft);color:var(--accent-ink);border-color:var(--accent-soft)}
+.tb:disabled{opacity:.35;cursor:not-allowed;background:none}
+.tb:disabled:hover{background:none;color:var(--muted);border-color:transparent}
+.ph{position:absolute;pointer-events:none;color:#aab4b0;padding:22px 26px;top:40px;left:0}
+
+/* ---------- editor: blocks the toolbar can now insert ---------- */
+.lex-input hr{border:0;border-top:1px solid var(--line);margin:1.1em 0}
+.lex-input hr.sel{border-top-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.lex-input sub,.lex-input sup{font-size:.72em;line-height:0}
+.lex-input mark{background:#fff2a8;color:inherit;border-radius:2px;padding:0 1px}
+/* checklist - the marker is drawn on ::before so a click can toggle it */
+.lex-input ul.cl{list-style:none;padding-left:1.5em}
+.lex-input ul.cl li{position:relative;padding-left:6px}
+.lex-input li.li-o::before,.lex-input li.li-x::before{
+  content:'';position:absolute;left:-1.25em;top:.36em;width:13px;height:13px;
+  border:1.4px solid var(--line);border-radius:3px;background:#fff;cursor:pointer}
+.lex-input li.li-x::before{background:var(--accent);border-color:var(--accent)}
+.lex-input li.li-x::after{
+  content:'';position:absolute;left:-1.09em;top:.55em;width:6px;height:3px;
+  border-left:1.6px solid #fff;border-bottom:1.6px solid #fff;transform:rotate(-45deg);pointer-events:none}
+.lex-input li.li-x{color:var(--muted);text-decoration:line-through}
+/* a table cell picked up by a drag-select */
+.lex-input .tbl{table-layout:fixed;width:calc(100% - 2px);overflow:hidden}
+.lex-input .tbl-c,.lex-input .tbl-h{position:relative;min-width:64px}
+.lex-input .tbl-c.sel-cell,.lex-input .tbl-h.sel-cell{background:var(--accent-soft)}
+.lex-input .tbl-c::selection,.lex-input .tbl-h::selection{background:transparent}
+/* Prism token colours for a highlighted code block */
+.lex-input .tk-c{color:#7d8a86;font-style:italic}
+.lex-input .tk-k{color:#0d6b5f;font-weight:600}
+.lex-input .tk-s{color:#a8442a}
+.lex-input .tk-n{color:#8a5a00}
+.lex-input .tk-f{color:#4a4ec2}
+.lex-input .tk-o{color:#5f6b67}
+.lex-input .tk-p{color:#93a09b}
+
+/* ---------- editor: toolbar extras ---------- */
+.lex-toolbar{align-items:center;row-gap:4px}
+.tb-grp{display:flex;align-items:center;gap:2px}
+.tb-tail{margin-left:auto;display:flex;align-items:center;gap:8px}
+.tb-count{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;
+  font-variant-numeric:tabular-nums}
+.tb-note{font-size:11px;color:var(--muted);white-space:nowrap}
+.tb-pick-menu.wide{min-width:184px}
+.tb-pick-btn .lbl.w{min-width:74px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tb-pick-opt.kbd::after{content:attr(data-kbd);margin-left:auto;padding-left:14px;
+  font-size:10.5px;color:var(--muted)}
+
+/* find / replace bar, docked under the toolbar */
+.find-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 8px;
+  border-bottom:1px solid var(--line-soft);background:#f7f9f8}
+.find-bar[hidden]{display:none}
+.find-bar input{border:1px solid var(--line);border-radius:4px;padding:4px 8px;font-size:13px;
+  min-width:130px;flex:1 1 130px;background:#fff}
+.find-bar input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.find-bar .hits{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;
+  font-variant-numeric:tabular-nums;min-width:52px;text-align:center}
+.find-bar .btn{padding:4px 9px;font-size:12.5px}
+.find-bar label{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);
+  white-space:nowrap;cursor:pointer}
+.find-bar label input{min-width:0;flex:none;margin:0}
+/* every hit at once, painted with the browser's own highlight registry (no DOM churn) */
+::highlight(c9-find){background:#ffe58a;color:var(--ink)}
+
+/* link editor popover */
+.link-pop{position:absolute;z-index:30;display:flex;align-items:center;gap:6px;padding:6px;
+  background:#fff;border:1px solid var(--line);border-radius:7px;box-shadow:0 10px 26px rgba(0,0,0,.16)}
+.link-pop[hidden]{display:none}
+.link-pop input{border:1px solid var(--line);border-radius:4px;padding:4px 8px;font-size:12.5px;
+  width:246px;font-family:var(--mono)}
+.link-pop input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.link-pop a{font-family:var(--mono);font-size:12.5px;color:var(--accent);max-width:246px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.link-pop .t-btn{width:26px;height:26px}
+
+/* HTML source view: line numbers in the gutter */
+.src-wrap{display:flex;min-height:400px;font-family:var(--mono);font-size:13px;line-height:1.6}
+.src-wrap[hidden]{display:none}
+.src-gutter{flex:0 0 auto;padding:22px 8px 22px 14px;text-align:right;color:#aab4b0;background:#f7f9f8;
+  border-right:1px solid var(--line-soft);user-select:none;white-space:pre;font-variant-numeric:tabular-nums}
+.md-input{padding:22px 26px}
+
+/* ---------- modal ---------- */
+.scrim{position:fixed;inset:0;background:rgba(20,30,28,.34);display:grid;place-items:center;z-index:50;padding:18px}
+.scrim[hidden]{display:none}
+.modal{background:#fff;border:1px solid var(--line);border-radius:10px;width:min(520px,100%);
+  box-shadow:0 20px 60px rgba(0,0,0,.22);max-height:90vh;overflow:auto}
+.modal h2{margin:0;padding:14px 16px;font-size:14px;border-bottom:1px solid var(--line-soft)}
+.modal .m-body{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.modal .m-foot{padding:12px 16px;border-top:1px solid var(--line-soft);display:flex;gap:8px;justify-content:flex-end}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.field input,.field select,.field textarea{
+  border:1px solid var(--line);border-radius:5px;padding:8px 10px;background:#fff;width:100%
+}
+.field textarea{resize:vertical;min-height:74px;line-height:1.5}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-soft)}
+.field label.check{display:flex;gap:8px;align-items:flex-start;text-transform:none;letter-spacing:0;
+  font-family:inherit;font-size:12.5px;color:var(--ink);cursor:pointer;margin-top:2px}
+.field label.check input{width:auto;margin:1px 0 0;flex:none}
+.field label.check em{display:block;font-style:normal;font-size:11.5px;color:var(--muted);line-height:1.45;margin-top:2px}
+.hint{font-size:11.5px;color:var(--muted);line-height:1.5}
+.hint b{color:var(--ink);font-weight:600}
+.ask-preview{display:flex;gap:10px;align-items:center;background:#f7f9f8;border:1px solid var(--line-soft);
+  border-radius:6px;padding:8px}
+.ask-preview img{width:74px;height:52px;object-fit:cover;border-radius:4px;border:1px solid var(--line)}
+.ask-preview span{font-family:var(--mono);font-size:12px;color:var(--muted)}
+
+/* ---------- toast / busy ---------- */
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(10px);opacity:0;
+  background:#182220;color:#fff;padding:9px 16px;border-radius:20px;font-size:13px;z-index:80;
+  transition:opacity .18s,transform .18s;pointer-events:none;max-width:80vw;text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{background:var(--danger)}
+
+.busy{position:absolute;inset:0;background:rgba(255,255,255,.82);display:grid;place-items:center;gap:12px;
+  align-content:center;justify-items:center;z-index:5}
+.busy[hidden]{display:none}
+.spin{width:26px;height:26px;border:2.5px solid var(--accent-soft);border-top-color:var(--accent);
+  border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.busy span{font-family:var(--mono);font-size:12px;color:var(--muted)}
+
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+@media (max-width:760px){
+  .body{flex-direction:column;gap:8px}
+  .side{width:100%}
+  .splitter{display:none}
+  .tree-panel{max-height:34vh}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="panel topbar">
+    <div class="brand">Callout9</div>
+    <button id="btnHelp" class="help" title="What Callout9 does"
+            aria-label="Open the Callout9 guide">?</button>
+  </header>
+
+  <div class="body">
+    <aside class="side">
+      <div class="panel gen">
+        <button id="btnNew" class="btn wide" title="Clear everything and start over">New</button>
+        <button id="btnOpen" class="btn wide"
+                title="Open a Markdown / AsciiDoc file and split it into tree nodes">Open</button>
+        <button id="btnBuild" class="btn primary wide">Build File</button>
+        <button id="btnPreview" class="btn wide">Preview</button>
+      </div>
+
+      <div class="panel tree-panel">
+        <div class="pane-head">
+          <div class="pane-tools">
+            <button id="btnAddImg" class="t-btn" title="Add image node from file (as child of selected node)" aria-label="Add image node">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor"
+                   stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round">
+                <rect x="1.9" y="3.3" width="12.2" height="9.4" rx="1.5"/>
+                <path d="M2.3 11.3 5.9 8l2.4 2.2 2.2-1.9 3.2 2.8"/>
+                <circle cx="6" cy="6.2" r="1"/>
+              </svg>
+            </button>
+            <button id="btnAddNode" class="t-btn" title="Add Text node (as child of selected node)">＋</button>
+            <span class="t-sep"></span>
+            <button id="btnDelNode" class="t-btn" title="Delete selected node" disabled>－</button>
+            <button id="btnRenameNode" class="t-btn" title="Rename selected node" disabled>✎</button>
+            <button id="btnMergeNode" class="t-btn" disabled
+                    title="Merge the selected text node into the text node above it"
+                    aria-label="Merge into the text node above">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor"
+                   stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round">
+                <path d="M3.4 2v2.4c0 2 4.6 2 4.6 4.1v4.1"/>
+                <path d="M12.6 2v2.4c0 2-4.6 2-4.6 4.1"/>
+                <path d="M5.7 10.5 8 13.1l2.3-2.6"/>
+              </svg>
+            </button>
+            <button id="btnFoldAll" class="t-btn" title="Collapse / expand all">⊟</button>
+            <span class="t-sep"></span>
+            <button id="btnTreeUndo" class="t-btn" disabled
+                    title="Undo the last tree change (Ctrl+Z, with the tree focused)"
+                    aria-label="Undo the last tree change">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor"
+                   stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round">
+                <path d="M3 7.4h6.6a3.1 3.1 0 1 1 0 6.2H6"/><path d="M5.6 4.6 3 7.4l2.6 2.8"/>
+              </svg>
+            </button>
+            <button id="btnTreeRedo" class="t-btn" disabled
+                    title="Redo the last undone tree change (Ctrl+Shift+Z)"
+                    aria-label="Redo the last undone tree change">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor"
+                   stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round">
+                <path d="M13 7.4H6.4a3.1 3.1 0 1 0 0 6.2H10"/><path d="M10.4 4.6 13 7.4l-2.6 2.8"/>
+              </svg>
+            </button>
+          </div>
+          <span class="count" id="treeCount">0</span>
+        </div>
+        <div class="tree" id="tree" tabindex="0"></div>
+      </div>
+
+      <div class="panel api">
+        <button id="btnApi" class="btn wide">Register AI API</button>
+        <span class="api-state" id="apiState">Checking…</span>
+      </div>
+    </aside>
+
+    <div class="splitter" id="splitter" role="separator" aria-orientation="vertical"
+         aria-label="Resize the tree panel" tabindex="0" title="Drag to resize (double-click to reset)"></div>
+
+    <main class="panel main">
+      <div class="ed-head">
+        <span class="ed-title" id="edTitle">Editor</span>
+        <span class="ed-kind" id="edKind" hidden></span>
+        <div class="ed-actions" id="edActions"></div>
+      </div>
+      <div class="ed-body" id="edBody">
+        <div class="blank">
+          <div class="big">Paste an image to get started</div>
+          <div>Press <kbd>Ctrl</kbd> + <kbd>V</kbd> to paste a screenshot and a node is added to the tree on the left.</div>
+          <img src="workflow.svg" alt="The four-step Callout9 workflow: paste a screen, the AI writes the body, the tree becomes the outline, and it all builds into one Markdown file.">
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- AI prompt -->
+<div class="scrim" id="askScrim" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="askH">
+    <h2 id="askH">Generate with AI</h2>
+    <div class="m-body">
+      <div class="ask-preview"><img id="askThumb" alt=""><span id="askFrom"></span></div>
+      <div class="field">
+        <label for="askModel">AI model</label>
+        <select id="askModel"></select>
+      </div>
+      <div class="field">
+        <label for="askMemo">Note for the AI</label>
+        <textarea id="askMemo">Provide a detailed, step-by-step explanation of each part of the attached image.</textarea>
+      </div>
+      <p class="hint" id="askHint">The image and the note are sent together, and the result is saved as a <b>Text</b> node under this one.</p>
+    </div>
+    <div class="m-foot">
+      <button class="btn" data-close="askScrim">Cancel</button>
+      <button class="btn primary" id="askSend">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- API settings -->
+<div class="scrim" id="apiScrim" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="apiH">
+    <h2 id="apiH">Register AI API</h2>
+    <div class="m-body">
+      <div class="field">
+        <label for="fProvider">Provider</label>
+        <select id="fProvider">
+          <option value="builtin">Claude (built-in · no key required)</option>
+          <option value="anthropic">Anthropic · own key</option>
+          <option value="openai">OpenAI</option>
+          <option value="gemini">Google Gemini</option>
+          <option value="compatible">OpenAI-compatible (in-house / local server)</option>
+        </select>
+      </div>
+      <div class="field" id="wrapBase" hidden>
+        <label for="fBase">Base URL</label>
+        <input id="fBase" placeholder="https://api.openai.com/v1" spellcheck="false">
+      </div>
+      <div class="field">
+        <label for="fModel">Model</label>
+        <input id="fModel" placeholder="claude-sonnet-4-6" spellcheck="false">
+      </div>
+      <div class="field" id="wrapImgModel">
+        <label for="fImgModel">Image model · used when labeling an image</label>
+        <input id="fImgModel" placeholder="gemini-2.5-flash-image" spellcheck="false">
+      </div>
+      <div class="field" id="wrapKey">
+        <label for="fKey">API key</label>
+        <input id="fKey" type="password" placeholder="sk-…" spellcheck="false" autocomplete="off">
+        <label class="check" for="fSaveKey">
+          <input id="fSaveKey" type="checkbox">
+          <span>Remember the API key<em>Off: the key lives in memory only and is gone once you leave the page.</em></span>
+        </label>
+      </div>
+      <div class="field">
+        <label for="fSystem">System prompt</label>
+        <textarea id="fSystem"></textarea>
+      </div>
+      <p class="hint" id="apiHint"></p>
+    </div>
+    <div class="m-foot">
+      <button class="btn" id="apiTest">Test connection</button>
+      <button class="btn" data-close="apiScrim">Cancel</button>
+      <button class="btn primary" id="apiSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Lexical bundle (local, window.LexicalBundle) -->
+<script src="lib/lexical/lexical.bundle.js"></script>
+
+<!-- Image editor (window.createImageEditor) -->
+<script src="lib/image-editor.js"></script>
+
+<!-- Node tree (window.createTreeView) -->
+<script src="lib/tree-view.js"></script>
+
+<script type="module">
+/* ══════════════════════════════════════════════════════════
+   0. Storage (falls back: Claude artifact -> browser -> memory)
+   ══════════════════════════════════════════════════════════ */
+const mem = {};
+const store = {
+  async get(k){
+    if (window.storage) { try { const r = await window.storage.get(k, false); return r ? r.value : null; } catch(e){ return null; } }
+    try { return localStorage.getItem(k); } catch(e){ return k in mem ? mem[k] : null; }
+  },
+  async set(k,v){
+    if (window.storage) { try { await window.storage.set(k, v, false); return true; } catch(e){ return false; } }
+    try { localStorage.setItem(k, v); return true; } catch(e){ mem[k] = v; return false; }
+  }
+};
+const K_PROJECT = 'manualgen:project';
+const K_CONFIG  = 'manualgen:config';
+
+/* ══════════════════════════════════════════════════════════
+   1. State
+   ══════════════════════════════════════════════════════════ */
+const DEFAULT_SYSTEM =
+`You are a technical writer producing software user manuals.
+Using the supplied screenshot and the author's note, write the manual body in English Markdown.
+- Use only elements actually visible in the screenshot; never invent features you cannot confirm.
+- Use numbered lists for procedures, and a table or bullet points to describe input fields.
+- The output is inserted into the document verbatim, so emit only the body text with no greeting or filler such as "Sure, here you go".
+- Do not wrap the whole answer in a code fence.`;
+
+const state = {
+  title: 'Manual',           // Document title (first MD line · file name)
+  nodes: [],          // { id, type:'image'|'text', name, image?, mime?, markdown?, children:[] }
+  imageSeq: 0,
+  textSeq: 0,
+  selectedId: null,
+  dirty: false
+};
+/* `apiKey` is the one field that may stay out of storage. With saveKey off it lives only in
+   this object, so closing the page takes it with it — the safer default. */
+let config = { provider:'builtin', model:'claude-sonnet-4-6', imageModel:'', apiKey:'', baseUrl:'',
+               saveKey:false, system: DEFAULT_SYSTEM };
+
+/* What actually gets written to storage: everything except the key, unless asked. */
+function persistableConfig(c){
+  const out = Object.assign({}, c);
+  if (!c.saveKey) out.apiKey = '';
+  return out;
+}
+
+/* The AI features stay disabled until an API is registered
+   (the built-in Claude provider needs no key of its own). */
+const AI_NOT_REGISTERED =
+  'AI API is not registered. Register one first under “Register AI API” at the bottom left.';
+const aiReady = () => config.provider === 'builtin' || !!config.apiKey;
+
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+
+/* ══════════════════════════════════════════════════════════
+   2. DOM references
+   ══════════════════════════════════════════════════════════ */
+const $ = s => document.querySelector(s);
+const treeEl = $('#tree'), edBody = $('#edBody'), edTitle = $('#edTitle'),
+      edKind = $('#edKind'), edActions = $('#edActions'), toastEl = $('#toast');
+
+function toast(msg, isErr){
+  toastEl.textContent = msg;
+  toastEl.className = 'toast show' + (isErr ? ' err' : '');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { toastEl.className = 'toast' + (isErr ? ' err' : ''); }, isErr ? 5200 : 2400);
+}
+document.querySelectorAll('[data-close]').forEach(b =>
+  b.addEventListener('click', () => { $('#' + b.dataset.close).hidden = true; }));
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.scrim').forEach(s => s.hidden = true);
+});
+
+/* The guide opens in its own window, the same way Preview does */
+$('#btnHelp').addEventListener('click', () => {
+  const w = window.open('Callout9_help.html', 'callout9Help', 'width=1060,height=900');
+  if (!w){ toast('The popup was blocked. Please allow popups for this page.', true); return; }
+  w.focus();
+});
+
+/* ══════════════════════════════════════════════════════════
+   3. Tree (rendering, collapsing, keyboard, rename, DnD and delete live in tree-view.js)
+   ══════════════════════════════════════════════════════════ */
+const tree = createTreeView(treeEl, {
+  state,
+  countEl: $('#treeCount'),
+  tools: { del: $('#btnDelNode'), rename: $('#btnRenameNode'),
+           merge: $('#btnMergeNode'), fold: $('#btnFoldAll') },
+  toast,
+  onSelect: selectNode,
+  onRenamed: node => { edTitle.textContent = node.name; },
+  onRemoved: () => renderEditor(),
+  onChange: () => { pushTreeUndo(); save(); }
+});
+
+/* ── Undo for the tree itself ───────────────────────
+   Lexical's history only covers the body of one node; adding, deleting, renaming,
+   dragging, splitting and merging nodes had no way back at all. Each of those ends in
+   onChange(), so the state as it stood just before is what goes on the stack.
+   The node objects are copied one level deep - a data URL is an immutable string, so the
+   copies share it and a snapshot costs almost nothing however large the images are. */
+const TREE_UNDO_MAX = 40;
+const cloneNodes = list => (list || []).map(n =>
+  Object.assign({}, n, { children: cloneNodes(n.children) }));
+const treeSnapshot = () => ({
+  nodes: cloneNodes(state.nodes), selectedId: state.selectedId,
+  imageSeq: state.imageSeq, textSeq: state.textSeq
+});
+let treeAt = treeSnapshot();          // the committed state the next change moves away from
+const treeUndo = [], treeRedo = [];
+let restoringTree = false;
+
+function resetTreeUndo(){
+  treeUndo.length = treeRedo.length = 0;
+  treeAt = treeSnapshot();
+  paintTreeUndo();
+}
+function paintTreeUndo(){
+  $('#btnTreeUndo').disabled = !treeUndo.length;
+  $('#btnTreeRedo').disabled = !treeRedo.length;
+}
+function pushTreeUndo(){
+  if (restoringTree) return;          // the restore itself is not a new change
+  treeUndo.push(treeAt);
+  if (treeUndo.length > TREE_UNDO_MAX) treeUndo.shift();
+  treeRedo.length = 0;
+  treeAt = treeSnapshot();
+  paintTreeUndo();
+}
+function applyTreeSnapshot(snap){
+  restoringTree = true;
+  try {
+    state.nodes = snap.nodes;
+    state.imageSeq = snap.imageSeq;
+    state.textSeq = snap.textSeq;
+    /* the node the editor was showing may be gone, or be a fresh copy of itself */
+    state.selectedId = tree.findNode(snap.selectedId) ? snap.selectedId : null;
+    state.dirty = false;
+    treeAt = treeSnapshot();
+    tree.render();
+    renderEditor();
+    save();
+  } finally { restoringTree = false; }
+  paintTreeUndo();
+}
+function undoTree(){
+  if (!treeUndo.length){ toast('There is no tree change to undo.', true); return; }
+  treeRedo.push(treeAt);
+  applyTreeSnapshot(treeUndo.pop());
+  toast('Undid the last tree change.');
+}
+function redoTree(){
+  if (!treeRedo.length){ toast('There is no tree change to redo.', true); return; }
+  treeUndo.push(treeAt);
+  applyTreeSnapshot(treeRedo.pop());
+  toast('Redid the tree change.');
+}
+$('#btnTreeUndo').addEventListener('click', undoTree);
+$('#btnTreeRedo').addEventListener('click', redoTree);
+/* Only while the tree has the focus, so it never steals Ctrl+Z from the body editor */
+treeEl.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return;
+  e.preventDefault(); e.stopPropagation();
+  (e.shiftKey ? redoTree : undoTree)();
+});
+
+function addTextNode(){
+  const node = {
+    id: uid(), type:'text', name:'Text' + (++state.textSeq),
+    markdown:'', html:'', children: []
+  };
+  const parent = tree.findNode(state.selectedId);
+  if (parent){ (parent.children ||= []).push(node); parent.collapsed = false; }
+  else state.nodes.push(node);
+  selectNode(node.id);
+  save();
+  tree.startRename(node.id);
+}
+$('#btnAddNode').addEventListener('click', addTextNode);
+
+/* ══════════════════════════════════════════════════════════
+   4. Image paste / add
+   ══════════════════════════════════════════════════════════ */
+function fileToDataURL(file){
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(new Error('Could not read the image.'));
+    r.readAsDataURL(file);
+  });
+}
+/* Adds under the selected node, or at the top level when nothing is selected.
+   When several images are added at once the caller pins the parent (parentId) so the
+   first one being selected does not turn the following siblings into its children. */
+async function addImage(file, parentId = state.selectedId){
+  const dataUrl = await fileToDataURL(file);
+  const node = {
+    id: uid(), type:'image', name:'Image' + (++state.imageSeq),
+    image: dataUrl, mime: (file.type || 'image/png'), children: []
+  };
+  const parent = tree.findNode(parentId);
+  if (parent){ (parent.children ||= []).push(node); parent.collapsed = false; }
+  else state.nodes.push(node);
+  selectNode(node.id); save();
+  toast(parent ? `Added node ${node.name} under ${parent.name}.`
+               : `Added node ${node.name}.`);
+}
+
+document.addEventListener('paste', async e => {
+  const items = [...(e.clipboardData?.items || [])].filter(i => i.type.startsWith('image/'));
+  if (!items.length) return;              // let text pastes fall through to the editor
+  e.preventDefault();
+  const parentId = state.selectedId;      // images pasted together all become siblings
+  for (const it of items){
+    const f = it.getAsFile();
+    if (f) { try { await addImage(f, parentId); } catch(err){ toast(err.message, true); } }
+  }
+});
+
+$('#btnAddImg').addEventListener('click', () => {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
+  const parentId = state.selectedId;      // picking several files also makes them siblings
+  inp.onchange = async () => { for (const f of inp.files) { try { await addImage(f, parentId); } catch(err){ toast(err.message, true); } } };
+  inp.click();
+});
+
+/* ══════════════════════════════════════════════════════════
+   5. HTML <-> Markdown conversion (edit as HTML, store as MD)
+   ══════════════════════════════════════════════════════════ */
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+/* Inline styles that survive the markdown round trip, carried on a <span>. Markdown has no
+   syntax for any of them, so they are written out as HTML and read back by mdInline(). */
+const STYLE_PROPS = ['color', 'background-color', 'font-family', 'font-size'];
+/* Raw inline HTML mdText() may emit; mdInline() lets exactly these back through un-escaped. */
+const KEEP_TAGS = ['u', 'sub', 'sup', 'mark'];
+
+/* Markdown metacharacters in body text. Without this a literal "2*3*4" comes back from the
+   next mdToHtml() as emphasis, and a line that happens to start with "# " becomes a heading.
+   Only the characters that really can change the reading are escaped, so the markdown the
+   user downloads still reads like prose. */
+function mdEscape(s, atLineStart){
+  const out = s.replace(/([\\`*_\[\]<~])/g, '\\$1');
+  return atLineStart
+    ? out.replace(/^([ \t]*)(#{1,6}(?=\s)|>|[-+](?=\s)|\|)/, '$1\\$2')
+         .replace(/^([ \t]*)(\d{1,9})([.)])(?=\s)/, '$1$2\\$3')
+    : out;
+}
+
+/* One inline pass over a string that is already HTML-escaped. Emphasis is matched with a
+   delimiter run rather than a "no star inside" class, so **bold with *italic* inside** and
+   snake_case both come out right. */
+function mdEmphasis(s){
+  let out = '', i = 0;
+  while (i < s.length){
+    const c = s[i];
+    if (c === '\\' && i + 1 < s.length){ out += c + s[i + 1]; i += 2; continue; }
+    if (c === '*' || c === '_' || c === '~'){
+      let n = 1;
+      while (s[i + n] === c) n++;
+      const run = c.repeat(n);
+      /* "_" only delimits at a word boundary, so file_name_here stays intact */
+      const wordInner = c === '_' && /\w/.test(s[i - 1] || '') && /\w/.test(s[i + n] || '');
+      const close = wordInner ? -1 : s.indexOf(run, i + n);
+      if (close > i + n && !/^\s/.test(s.slice(i + n, close))){
+        const inner = mdEmphasis(s.slice(i + n, close));
+        const wrap = c === '~' ? (n >= 2 ? ['<del>', '</del>'] : null)
+                   : n >= 3   ? ['<strong><em>', '</em></strong>']
+                   : n === 2  ? ['<strong>', '</strong>']
+                              : ['<em>', '</em>'];
+        if (wrap){ out += wrap[0] + inner + wrap[1]; i = close + n; continue; }
+      }
+      out += run; i += n; continue;
+    }
+    out += c; i++;
+  }
+  return out;
+}
+/* Balanced-bracket scan, so [see [1] here](url) and (a(b)c) style targets both survive */
+function matchBracket(s, start, open, close){
+  let depth = 0;
+  for (let i = start; i < s.length; i++){
+    if (s[i] === '\\'){ i++; continue; }
+    if (s[i] === open) depth++;
+    else if (s[i] === close && !--depth) return i;
+  }
+  return -1;
+}
+function mdLinks(s){
+  let out = '', i = 0;
+  while (i < s.length){
+    const bang = s[i] === '!' && s[i + 1] === '[';
+    if (s[i] === '[' || bang){
+      const lb = bang ? i + 1 : i;
+      const rb = matchBracket(s, lb, '[', ']');
+      if (rb > 0 && s[rb + 1] === '('){
+        const rp = matchBracket(s, rb + 1, '(', ')');
+        if (rp > 0){
+          const text = s.slice(lb + 1, rb);
+          /* an optional "title" after the target is dropped, the target itself is kept whole */
+          const dest = s.slice(rb + 2, rp).replace(/\s+&quot;[\s\S]*&quot;\s*$/, '').trim();
+          out += bang ? '<img alt="' + text.replace(/"/g, '&quot;') + '" src="' + dest + '">'
+                      : '<a href="' + dest + '">' + mdEmphasis(text) + '</a>';
+          i = rp + 1; continue;
+        }
+      }
+    }
+    if (s[i] === '\\' && i + 1 < s.length){ out += s[i] + s[i + 1]; i += 2; continue; }
+    out += s[i]; i++;
+  }
+  return out;
+}
+const KEEP_RE = new RegExp('&lt;(' + KEEP_TAGS.join('|') + ')&gt;([\\s\\S]*?)&lt;\\/\\1&gt;', 'g');
+
+/* Parks a code span while the rest of the line is marked up. A NUL cannot occur in the
+   text itself, and it is built at runtime so no escape survives into the stored HTML. */
+const CODE_MARK = String.fromCharCode(0);
+const CODE_SLOT = new RegExp(CODE_MARK + '(\\d+)' + CODE_MARK, 'g');
+function mdInline(s){
+  const spans = [];
+  /* A code span wins over every other marker, so they leave the string first and come
+     back last - "**not `*bold*` here**" must not read the stars inside the span. */
+  let t = esc(s)
+    .replace(/(?<!\\)(`+)([\s\S]*?)(?<!\\)\1/g,
+             (_, f, c) => CODE_MARK + spans.push(c.replace(/^ | $/g, '')) + CODE_MARK)
+    /* the styled spans and the raw tags mdText() emits come back through - nothing else does */
+    .replace(/&lt;span style=("[^"&<>]*")&gt;([\s\S]*?)&lt;\/span&gt;/g, '<span style=$1>$2</span>')
+    .replace(KEEP_RE, '<$1>$2</$1>');
+  t = mdEmphasis(mdLinks(t))
+    .replace(/&lt;(https?:[^\s&<>]+)&gt;/g, '<a href="$1">$1</a>')     // autolink
+    .replace(/\\([\\`*_\[\]<~#>+\-.)|])/g, '$1');                      // drop the backslashes
+  return t.replace(CODE_SLOT, (_, n) => '<code>' + spans[n - 1] + '</code>');
+}
+
+function mdToHtml(md){
+  const lines = (md || '').replace(/\r\n?/g, '\n').split('\n');
+  const out = [];
+  let i = 0;
+  const isTableRow = l => /^\s*\|.*\|\s*$/.test(l);
+  /* a "\|" inside a cell is content, not a divider */
+  const cells = l => l.trim().replace(/^\||\|$/g, '')
+                      .split(/(?<!\\)\|/).map(c => c.trim().replace(/\\\|/g, '|'));
+
+  while (i < lines.length){
+    const line = lines[i];
+
+    const fence = /^\s*(`{3,}|~{3,})\s*([A-Za-z0-9_+#-]*)/.exec(line);
+    if (fence){                                                  // code block, language kept
+      const close = new RegExp('^\\s*' + fence[1][0] + '{' + fence[1].length + ',}\\s*$');
+      const buf = []; i++;
+      while (i < lines.length && !close.test(lines[i])) buf.push(lines[i++]);
+      i++;
+      const cls = fence[2] ? ' class="language-' + fence[2].toLowerCase() + '"' : '';
+      out.push('<pre><code' + cls + '>' + esc(buf.join('\n')) + '</code></pre>');
+      continue;
+    }
+    if (!line.trim()){ i++; continue; }
+    if (/^\s*((-\s*){3,}|(\*\s*){3,}|(_\s*){3,})$/.test(line)){ out.push('<hr>'); i++; continue; }
+
+    const h = /^(#{1,6})\s+(.*?)\s*#*$/.exec(line);
+    if (h){ out.push(`<h${h[1].length}>${mdInline(h[2].trim())}</h${h[1].length}>`); i++; continue; }
+
+    if (isTableRow(line) && isTableRow(lines[i+1] || '') && /^[\s|:-]+$/.test(lines[i+1])){
+      const head = cells(line);
+      const align = cells(lines[i+1]).map(c =>                   // :--- / :---: / ---:
+        /^:.*:$/.test(c) ? 'center' : /:$/.test(c) ? 'right' : /^:/.test(c) ? 'left' : '');
+      i += 2;
+      const rows = [];
+      while (i < lines.length && isTableRow(lines[i])) rows.push(cells(lines[i++]));
+      const at = k => align[k] ? ' style="text-align: ' + align[k] + '"' : '';
+      out.push('<table><thead><tr>' + head.map((c,k) => `<th${at(k)}>${mdInline(c)}</th>`).join('') +
+        '</tr></thead><tbody>' +
+        rows.map(r => '<tr>' + r.map((c,k) => `<td${at(k)}>${mdInline(c)}</td>`).join('') + '</tr>').join('') +
+        '</tbody></table>');
+      continue;
+    }
+
+    if (/^\s*>\s?/.test(line)){                                  // blockquote
+      const buf = [];
+      while (i < lines.length && /^\s*>\s?/.test(lines[i])) buf.push(lines[i++].replace(/^\s*>\s?/, ''));
+      /* Keep a single-paragraph quote as bare inline content, matching what Lexical
+         emits - otherwise every save/reload round trip re-wraps it in a <p>. */
+      const inner = mdToHtml(buf.join('\n'));
+      const lone = /^<p>([\s\S]*)<\/p>$/.exec(inner);
+      out.push(`<blockquote>${lone && !lone[1].includes('<p>') ? lone[1] : inner}</blockquote>`);
+      continue;
+    }
+
+    if (/^\s*([-*+]|\d+[.)])\s+/.test(line)){                     // list (nesting supported)
+      const buf = [];
+      while (i < lines.length && (/^\s*([-*+]|\d+[.)])\s+/.test(lines[i]) || /^\s{2,}\S/.test(lines[i]))) buf.push(lines[i++]);
+      out.push(listToHtml(buf, 0));
+      continue;
+    }
+
+    const para = [];                                             // paragraph
+    while (i < lines.length && lines[i].trim() &&
+           !/^\s*(#{1,6}\s|>|`{3,}|~{3,}|[-*+]\s|\d+[.)]\s)/.test(lines[i]) && !isTableRow(lines[i]))
+      para.push(lines[i++]);
+    out.push('<p>' + para.map(l => mdInline(l.trim())).join('<br>') + '</p>');
+  }
+  return out.join('\n');
+}
+const TASK = /^\[([ xX])\]\s+/;
+function listToHtml(lines, depth){
+  const pat = new RegExp(`^\\s{${depth * 2},${depth * 2 + 1}}?([-*+]|\\d+[.)])\\s+(.*)$`);
+  const items = [];
+  let ordered = false, start = null;
+  for (let i = 0; i < lines.length; i++){
+    const m = pat.exec(lines[i]);
+    if (m){
+      ordered = /\d/.test(m[1]);
+      if (ordered && start === null) start = parseInt(m[1], 10);   // "3." keeps numbering from 3
+      items.push({ text: m[2], sub: [] });
+    } else if (items.length){
+      items[items.length - 1].sub.push(lines[i].replace(/^\s{2}/, ''));
+    }
+  }
+  if (!items.length) return '<p>' + mdInline(lines.join(' ').trim()) + '</p>';
+  /* "- [ ] text" is a checklist. Mixing checked items with plain bullets in one list is not
+     representable, so the whole list follows whatever its first item is. */
+  const task = !ordered && TASK.test(items[0].text);
+  const tag = ordered ? 'ol' : 'ul';
+  const attr = ordered && start !== null && start !== 1 ? ' start="' + start + '"'
+             : task ? ' class="checklist"' : '';
+  return '<' + tag + attr + '>' + items.map(it => {
+    const t = TASK.exec(it.text);
+    const li = task && t
+      ? '<li role="checkbox" aria-checked="' + /[xX]/.test(t[1]) + '">' + mdInline(it.text.slice(t[0].length))
+      : '<li>' + mdInline(it.text);
+    return li + (it.sub.length ? listToHtml(it.sub, 0) : '') + '</li>';
+  }).join('') + '</' + tag + '>';
+}
+
+function htmlToMd(html){
+  const doc = new DOMParser().parseFromString(html || '', 'text/html');
+  return mdBlocks(doc.body).replace(/\n{3,}/g, '\n\n').trim();
+}
+const INLINE_MARK = { strong:'**', b:'**', em:'*', i:'*', del:'~~', s:'~~', strike:'~~' };
+/* Lexical exports a bold run as <b><strong>…</strong></b> and an italic one as <i><em>…</em></i>
+   (createDOM already picks the semantic tag, then exportDOM wraps it again). Emitting the
+   marker for both levels produced "****text****", which no markdown reader renders. */
+function sameMark(el, mark){
+  const only = el.childNodes.length === 1 ? el.firstChild : null;
+  return !!only && only.nodeType === 1 && INLINE_MARK[only.tagName.toLowerCase()] === mark;
+}
+/* opt.inCode: inside <pre>, where nothing is escaped and every space is content.
+   opt.raw:    inside an <a> label or a table cell, where a real line break cannot be written. */
+function mdText(el, opt){
+  const o = opt || {};
+  let out = '';
+  el.childNodes.forEach(c => {
+    if (c.nodeType === 3){
+      if (o.inCode){ out += c.nodeValue; return; }
+      /* a run of spaces is content the author typed; only the newlines that pretty-printed
+         HTML introduces are folded away */
+      out += mdEscape(c.nodeValue.replace(/[\t\n\r]+/g, ' '), !out.trim());
+      return;
+    }
+    if (c.nodeType !== 1) return;
+    const t = c.tagName.toLowerCase();
+    /* inside a code block a break is just a newline - a markdown hard break would leave
+       two stray spaces at the end of every line of code */
+    if (t === 'br'){ out += o.inCode ? '\n' : o.raw ? '<br>' : '  \n'; return; }
+    if (t === 'code' && !o.inCode){
+      const body = c.textContent;                       // a backtick inside needs a longer fence
+      const run = (body.match(/`+/g) || []).reduce((n, s) => Math.max(n, s.length), 0);
+      const f = '`'.repeat(run + 1);
+      out += f + (body.startsWith('`') ? ' ' : '') + body + (body.endsWith('`') ? ' ' : '') + f;
+      return;
+    }
+    if (t === 'img'){
+      out += '![' + (c.getAttribute('alt') || '').replace(/[\[\]]/g, '') + '](' +
+             (c.getAttribute('src') || '') + ')';
+      return;
+    }
+
+    let inner = mdText(c, o);
+    if (t === 'a'){
+      const label = mdText(c, Object.assign({}, o, { raw:true })).trim();
+      out += label ? '[' + label + '](' + (c.getAttribute('href') || '') + ')' : '';
+      return;
+    }
+
+    /* Colours, fonts and sizes can sit on any inline tag, not just <span> — a coloured bold
+       run carries them on the <strong>. Markdown has no syntax for them, so keep an HTML span. */
+    const css = inlineStyle(c);
+    if (css && inner.trim()) inner = '<span style="' + css + '">' + inner + '</span>';
+
+    /* Markdown cannot underline, sub/superscript or highlight either, so those tags are
+       carried over as they stand */
+    if (KEEP_TAGS.includes(t)){ out += inner.trim() ? '<' + t + '>' + inner + '</' + t + '>' : inner; return; }
+
+    const mark = INLINE_MARK[t];
+    if (mark){
+      /* the surrounding spaces have to sit outside the markers, or the run does not render */
+      const lead = /^\s*/.exec(inner)[0], tail = /\s*$/.exec(inner)[0];
+      const body = inner.trim();
+      out += !body ? inner : sameMark(c, mark) ? lead + body + tail : lead + mark + body + mark + tail;
+      return;
+    }
+    out += inner;
+  });
+  return out;
+}
+const BLOCK_CHILD = /^(p|div|section|article|figure|ul|ol|li|blockquote|pre|hr|table|h[1-6])$/i;
+const hasBlockChild = el => [...el.children].some(x => BLOCK_CHILD.test(x.tagName));
+/* The language a <pre><code class="language-js"> carries, so ```js survives the round trip */
+function codeLang(pre){
+  /* Lexical stamps the language on the <pre> itself; a block that came in from markdown
+     carries it as a class on the inner <code>. */
+  const attr = pre.getAttribute('data-highlight-language') || pre.getAttribute('data-language');
+  if (attr) return attr;
+  const el = pre.querySelector('code') || pre;
+  const m = /(?:^|\s)(?:language|lang)-([\w+#-]+)/.exec(el.className || '');
+  return m ? m[1] : '';
+}
+function mdBlocks(el){
+  const parts = [];
+  el.childNodes.forEach(c => {
+    if (c.nodeType === 3){ const t = c.nodeValue.trim(); if (t) parts.push(mdEscape(t, true)); return; }
+    if (c.nodeType !== 1) return;
+    const tag = c.tagName.toLowerCase();
+    if (/^h[1-6]$/.test(tag)) parts.push('#'.repeat(+tag[1]) + ' ' + mdText(c).trim());
+    else if (tag === 'p'){ const s = mdText(c).trim(); if (s) parts.push(s); }
+    else if (tag === 'ul' || tag === 'ol') parts.push(mdList(c, 0));
+    else if (tag === 'blockquote'){
+      /* Lexical keeps a quote's text inline (<blockquote>text <b>bold</b></blockquote>), so
+         mdBlocks() used to turn every inline run inside it into its own quote block.
+         Only recurse when the quote really does hold block-level children. */
+      const body = hasBlockChild(c) ? mdBlocks(c) : mdText(c).trim();
+      parts.push(body.split('\n').map(l => l ? '> ' + l : '>').join('\n'));
+    }
+    else if (tag === 'pre'){
+      const body = mdText(c, { inCode:true }).replace(/\n$/, '');
+      /* the fence has to be longer than the longest backtick run inside the block */
+      const run = (body.match(/^`{3,}/gm) || []).reduce((n, s) => Math.max(n, s.length), 2);
+      const f = '`'.repeat(run + 1);
+      parts.push(f + codeLang(c) + '\n' + body + '\n' + f);
+    }
+    else if (tag === 'hr') parts.push('---');
+    else if (tag === 'table') parts.push(mdTable(c));
+    else if (tag === 'br'){ /* ignore */ }
+    else if (['div','section','article','main','figure'].includes(tag)) parts.push(mdBlocks(c));
+    else { const s = mdText(c).trim(); if (s) parts.push(s); }
+  });
+  return parts.filter(Boolean).join('\n\n');
+}
+const isChecked = li => li.getAttribute('aria-checked') === 'true' ||
+                        /(^|\s)li-x(\s|$)/.test(li.className || '');
+function mdList(list, depth){
+  const ordered = list.tagName.toLowerCase() === 'ol';
+  const check = !ordered && (/(^|\s)(cl|checklist)(\s|$)/.test(list.className || '') ||
+                             [...list.children].some(li => li.hasAttribute('aria-checked')));
+  const pad = '  '.repeat(depth);
+  const lines = [];
+  let i = parseInt(list.getAttribute('start') || '1', 10) || 1;   // "start" keeps the numbering
+  [...list.children].forEach(li => {
+    if (li.tagName.toLowerCase() !== 'li') return;
+    const nested = [...li.children].filter(x => /^(ul|ol)$/i.test(x.tagName));
+    const clone = li.cloneNode(true);
+    [...clone.children].forEach(x => { if (/^(ul|ol)$/i.test(x.tagName)) x.remove(); });
+    const box = check ? (isChecked(li) ? '[x] ' : '[ ] ') : '';
+    lines.push(pad + (ordered ? `${i++}. ` : '- ') + box + mdText(clone).trim());
+    nested.forEach(n => lines.push(mdList(n, depth + 1)));
+  });
+  return lines.join('\n');
+}
+const ALIGN_MARK = { left:':---', center:':---:', right:'---:' };
+function mdTable(t){
+  const rows = [...t.querySelectorAll('tr')];
+  if (!rows.length) return '';
+  /* a cell body has to stay on one line, so any break inside is carried as <br> */
+  const cells = r => [...r.children].map(td =>
+    mdText(td, { raw:true }).trim().replace(/\|/g, '\\|') || ' ');
+  const head = cells(rows[0]);
+  const align = [...rows[0].children].map(td =>
+    (td.style && td.style.textAlign) || td.getAttribute('align') || '');
+  const lines = ['| ' + head.join(' | ') + ' |',
+                 '|' + head.map((_, k) => ' ' + (ALIGN_MARK[align[k]] || '---') + ' ').join('|') + '|'];
+  rows.slice(1).forEach(r => lines.push('| ' + cells(r).join(' | ') + ' |'));
+  return lines.join('\n');
+}
+
+/* ══════════════════════════════════════════════════════════
+   6. Editor
+   ══════════════════════════════════════════════════════════ */
+let currentEditor = null;   // { save(), destroy() }
+
+function selectNode(id){
+  if (state.selectedId === id) return;
+  flushEditor();
+  state.selectedId = id;
+  tree.expandAncestors(id);
+  tree.render();
+  renderEditor();
+}
+function flushEditor(){                    // keep edits from being lost when switching nodes
+  if (currentEditor && state.dirty){ currentEditor.save(true); }
+}
+
+function renderEditor(){
+  if (currentEditor?.destroy) currentEditor.destroy();
+  currentEditor = null; state.dirty = false;
+  edActions.innerHTML = ''; edBody.innerHTML = '';
+
+  const node = tree.findNode(state.selectedId);
+  if (!node){
+    edTitle.textContent = 'Editor'; edKind.hidden = true;
+    edBody.innerHTML = `<div class="blank">
+      <div class="big">Paste an image to get started</div>
+      <div>Press <kbd>Ctrl</kbd> + <kbd>V</kbd> to paste a screenshot and a node is added to the tree on the left.</div>
+      <img src="workflow.svg" alt="The four-step Callout9 workflow: paste a screen, the AI writes the body, the tree becomes the outline, and it all builds into one Markdown file."></div>`;
+    return;
+  }
+  edTitle.textContent = node.name;
+  edKind.hidden = false;
+  edKind.textContent = node.type === 'image' ? 'image' : 'text';
+
+  if (node.type === 'image') renderImageView(node);
+  else renderTextView(node);
+}
+
+function renderImageView(node){
+  const wrap = document.createElement('div');
+  wrap.className = 'imgwrap';
+  edBody.appendChild(wrap);
+
+  const busy = document.createElement('div');
+  busy.className = 'busy'; busy.hidden = true;
+  busy.innerHTML = '<div class="spin"></div><span>AI is writing the content…</span>';
+  wrap.appendChild(busy);
+
+  /* If the editor is unavailable (script failed to load), fall back to view-only */
+  if (typeof window.createImageEditor !== 'function'){
+    const img = document.createElement('img');
+    img.src = node.image; img.alt = node.name;
+    img.style.cssText = 'max-width:100%;margin:auto;border:1px solid var(--line);border-radius:5px;background:#fff';
+    busy.before(img);
+    const fab = document.createElement('button');
+    fab.className = 'btn primary'; fab.textContent = '✦ Generate with AI';
+    fab.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:24px';
+    fab.addEventListener('click', () => openAsk(node));
+    wrap.appendChild(fab);
+    currentEditor = {
+      node, save(){}, busy, fab,
+      setAIEnabled(on){
+        fab.classList.toggle('off', !on);
+        fab.setAttribute('aria-disabled', on ? 'false' : 'true');
+        fab.title = on ? '' : 'An AI API must be registered first';
+      }
+    };
+    currentEditor.setAIEnabled(aiReady());
+    return;
+  }
+
+  /* Saving is driven by the editor toolbar icon (💾 · Ctrl+S); this only shows status */
+  const flag = document.createElement('span');
+  flag.className = 'dirty'; flag.textContent = '';
+  edActions.append(flag);
+
+  const markDirty = () => { state.dirty = true; flag.textContent = '● Unsaved'; };
+
+  const ed = createImageEditor(wrap, {
+    src: node.image,
+    aiEnabled: aiReady(),
+    onChange: markDirty,
+    onAI: () => openAsk(node),
+    onSave: () => currentEditor.save()
+  });
+  wrap.appendChild(busy);              // re-append so it stays above the editor
+
+  currentEditor = {
+    node, busy, fab: ed.aiButton,
+    setAIEnabled: ed.setAIEnabled,
+    save(silent){
+      const changed = ed.isDirty();
+      if (changed){
+        node.image = ed.toDataURL('image/png');
+        node.mime  = 'image/png';
+        ed.markSaved();
+      }
+      state.dirty = false; flag.textContent = '';
+      if (changed){ save(); tree.render(); }
+      if (!silent) toast(changed ? `Saved to ${node.name}.` : 'Nothing has changed.');
+    },
+    destroy(){ ed.destroy(); }
+  };
+}
+
+/* The picture a text node describes: the nearest image among the siblings before it,
+   and failing that the parent when the parent is an image node. */
+function imageFor(id){
+  let hit = null;
+  const walk = (list, parent) => {
+    const i = list.findIndex(n => n.id === id);
+    if (i >= 0){
+      for (let k = i - 1; k >= 0; k--) if (list[k].type === 'image'){ hit = list[k]; return true; }
+      if (parent && parent.type === 'image') hit = parent;
+      return true;                      // found the node; stop whether or not an image turned up
+    }
+    for (const n of list) if (n.children?.length && walk(n.children, n)) return true;
+    return false;
+  };
+  walk(state.nodes, null);
+  return hit;
+}
+const NO_IMAGE_TO_LABEL =
+  'There is no image to label. Put this text node after an image node, or under one.';
+
+/* ── Splitting a text node ──────────────────────────
+   The editor hands over everything below the caret's line; it is stored in a new sibling
+   right below this node, named after the first line of that tail that carries text. */
+const SPLIT_TITLE_MAX = 30;
+const BLOCK_TAGS = 'p,div,li,h1,h2,h3,h4,h5,h6,blockquote,pre,tr,td,th,section,article,figcaption';
+function splitTitle(html){
+  const doc = new DOMParser().parseFromString(html || '', 'text/html');
+  /* textContent runs the blocks together, so every line break becomes a real newline first */
+  doc.body.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+  doc.body.querySelectorAll(BLOCK_TAGS).forEach(el => el.append('\n'));
+  for (const line of (doc.body.textContent || '').split('\n')){
+    const t = line.replace(/\s+/g, ' ').trim();
+    if (t) return t.slice(0, SPLIT_TITLE_MAX).trimEnd();
+  }
+  return '';
+}
+function addSplitSibling(after, html){
+  const node = {
+    id: uid(), type:'text',
+    name: splitTitle(html) || ('Text' + (++state.textSeq)),
+    html, markdown: htmlToMd(html), children: []
+  };
+  tree.insertAfter(after.id, node);          // redraws the tree and autosaves
+  return node;
+}
+
+/* ── Merging a text node into another ───────────────
+   The reverse of the split above: the selected text node is folded into the nearest text
+   node before it, and disappears from the tree. */
+const NO_MERGE_TARGET =
+  'There is no text node to merge into. A text node among the siblings above this one, or an ancestor text node, is needed.';
+
+/* Where a node sits: the list holding it, its index in that list, its ancestors from the
+   top down, and its 1-based depth (a top-level node is 1). */
+function locate(id){
+  let hit = null;
+  const walk = (list, chain) => {
+    for (let i = 0; i < list.length; i++){
+      const n = list[i];
+      if (n.id === id){ hit = { node:n, list, index:i, chain, depth: chain.length + 1 }; return true; }
+      if (n.children?.length && walk(n.children, chain.concat(n))) return true;
+    }
+    return false;
+  };
+  walk(state.nodes, []);
+  return hit;
+}
+/* The text node a merge folds the selection into: the nearest one among the siblings
+   above it, and failing that the nearest text node up the parent chain. */
+function mergeTargetFor(loc){
+  for (let i = loc.index - 1; i >= 0; i--) if (loc.list[i].type === 'text') return loc.list[i];
+  for (let i = loc.chain.length - 1; i >= 0; i--) if (loc.chain[i].type === 'text') return loc.chain[i];
+  return null;
+}
+const nodeHtml = n => n.html || mdToHtml(n.markdown || '');
+
+function mergeSelectedIntoText(){
+  const loc = locate(state.selectedId);
+  if (!loc){ toast('Select the text node to merge first.', true); return; }
+  const src = loc.node;
+  if (src.type !== 'text'){ toast('Only a text node can be merged.', true); return; }
+  const target = mergeTargetFor(loc);
+  if (!target){ toast(NO_MERGE_TARGET, true); return; }
+
+  const kids = src.children?.length
+    ? `\nIts ${src.children.length} child node(s) move under “${target.name}”.` : '';
+  if (!confirm(`Merge “${src.name}” into “${target.name}”?\n` +
+               `Its name is appended as a heading, then its body, and the node itself is removed.${kids}`)) return;
+
+  flushEditor();                            // whatever is on screen unsaved counts as the body
+  /* The node's own name leads the appended body, as a heading at its tree depth
+     (depth 3 -> <h3>), exactly as buildMarkdown() would have emitted it. */
+  const level = Math.min(Math.max(loc.depth, 1), 6);
+  const name = (src.name || '').trim();
+  const merged = [nodeHtml(target),
+                  name ? `<h${level}>${esc(name)}</h${level}>` : '',
+                  nodeHtml(src)]
+                 .filter(s => s && s.trim()).join('\n');
+  target.html = merged;
+  target.markdown = htmlToMd(merged);
+  if (src.children?.length){                // children stay in the tree, under the target
+    (target.children ||= []).push(...src.children);
+    target.collapsed = false;
+  }
+  loc.list.splice(loc.index, 1);            // the target is never inside src, so this index holds
+
+  state.selectedId = target.id;
+  tree.expandAncestors(target.id);
+  tree.render();
+  renderEditor();
+  save();
+  toast(`Merged “${src.name}” into ${target.name}.`);
+}
+$('#btnMergeNode').addEventListener('click', mergeSelectedIntoText);
+
+/* How long the typing has to stop before the body is written back to the node */
+const AUTOSAVE_MS = 2500;
+
+function renderTextView(node){
+  const btnSave = document.createElement('button');
+  btnSave.className = 'btn primary sm'; btnSave.textContent = 'Save';
+  const flag = document.createElement('span');
+  flag.className = 'dirty'; flag.textContent = '';
+
+  /* Labels the image this text belongs to, using the numbers written here */
+  const target = imageFor(node.id);
+  const btnAI = document.createElement('button');
+  btnAI.className = 'btn sm'; btnAI.textContent = '✦ Generate with AI';
+  const setAI = on => {
+    const ok = on && !!target;
+    btnAI.classList.toggle('off', !ok);
+    btnAI.setAttribute('aria-disabled', ok ? 'false' : 'true');
+    btnAI.title = !target ? NO_IMAGE_TO_LABEL
+                : ok     ? `Label ${target.name} with the numbers in this text`
+                         : 'An AI API must be registered first';
+  };
+  btnAI.addEventListener('click', () => {
+    if (!target){ toast(NO_IMAGE_TO_LABEL, true); return; }
+    if (!aiReady()){ toast(AI_NOT_REGISTERED, true); openApi(); return; }
+    if (state.dirty) currentEditor.save(true);   // send the text as it stands on screen
+    openLabelAsk(target, node.markdown || '');
+  });
+  edActions.append(flag, btnAI, btnSave);
+
+  const shell = document.createElement('div');
+  shell.className = 'editor-shell';
+  edBody.appendChild(shell);
+
+  /* Shown while the AI draws; runAsk() drives it through currentEditor.busy */
+  const busy = document.createElement('div');
+  busy.className = 'busy'; busy.hidden = true;
+  busy.innerHTML = '<div class="spin"></div><span>AI is drawing the image…</span>';
+  edBody.appendChild(busy);
+
+  const markDirty = () => {
+    state.dirty = true;
+    flag.className = 'dirty'; flag.textContent = '● Unsaved';
+  };
+  const clearDirty = () => { state.dirty = false; flag.className = 'dirty'; flag.textContent = ''; };
+
+  if (!LEX_OK){
+    btnSave.disabled = true;
+    shell.innerHTML =
+      '<div class="blank"><div class="big">Could not load the editor</div>' +
+      '<div>vendor/lexical.bundle.js failed to load. Check that the file exists, then refresh.</div></div>';
+    currentEditor = {
+      node, busy, fab: btnAI, setAIEnabled: setAI,
+      save(){ toast('Cannot save because the editor failed to load.', true); }
+    };
+    setAI(aiReady());
+    return;
+  }
+
+  /* Autosave: the body is written back to the node a few seconds after the typing stops,
+     so a crash or a closed tab no longer costs the whole edit. The Save button stays -
+     it is what confirms the write and clears the "unsaved" flag out loud. */
+  let autoT = null;
+  const cancelAuto = () => { clearTimeout(autoT); autoT = null; };
+  const scheduleAuto = () => {
+    cancelAuto();
+    autoT = setTimeout(() => {
+      if (state.dirty && currentEditor && currentEditor.node === node) currentEditor.save(true, true);
+    }, AUTOSAVE_MS);
+  };
+
+  const ed = mountLexical(shell, node, () => { markDirty(); scheduleAuto(); }, tail => {
+    currentEditor.save(true);                       // the caret's line and all above it stay here
+    const made = addSplitSibling(node, tail);
+    toast(`Split off “${made.name}”.`);
+  });
+  currentEditor = {
+    node, busy, fab: btnAI, setAIEnabled: setAI,
+    save(silent, auto){
+      cancelAuto();
+      node.html = ed.getHtml();          // editing state
+      node.markdown = ed.getMarkdown();  // for export
+      clearDirty(); save();
+      if (auto){ flag.className = 'dirty saved'; flag.textContent = '✓ Autosaved'; }
+      else if (!silent) toast(`Saved to ${node.name}.`);
+    },
+    destroy(){ cancelAuto(); ed.destroy?.(); }
+  };
+  setAI(aiReady());
+  btnSave.addEventListener('click', () => currentEditor.save());
+  shell.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 's'){
+      e.preventDefault(); currentEditor.save();
+    }
+  });
+}
+
+/* ── Lexical editor ─────────────────────────────── */
+let LEX = null, LEX_OK = false;
+/* Picks up the namespaces vendor/lexical.bundle.js exposes as window.LexicalBundle.
+   No network request is made, so this also works offline and behind a corporate network. */
+function loadLexical(){
+  const B = window.LexicalBundle;
+  const NS = ['core','rich','list','code','link','html','table','hist','util','sel'];
+  const missing = B ? NS.filter(k => !B[k]) : NS;
+  if (!B || missing.length){
+    console.warn('Lexical bundle failed to load; text editing is unavailable.',
+      B ? 'Missing namespaces: ' + missing.join(', ')
+        : 'vendor/lexical.bundle.js could not be loaded (missing file or wrong path).');
+    LEX_OK = false;
+    return;
+  }
+  LEX = B;
+  defineExtraNodes(B);
+  LEX_OK = true;
+}
+
+const LEX_THEME = {
+  paragraph:'p', quote:'q',
+  heading:{ h1:'h1', h2:'h2', h3:'h3', h4:'h4', h5:'h5', h6:'h6' },
+  list:{ ul:'ul', ol:'ol', checklist:'cl', listitem:'li',
+         listitemChecked:'li-x', listitemUnchecked:'li-o', nested:{ listitem:'li' } },
+  text:{ bold:'b', italic:'i', underline:'u', strikethrough:'s', code:'code',
+         subscript:'sub', superscript:'sup', highlight:'hl' },
+  code:'code-block', link:'link',
+  table:'tbl', tableRow:'tbl-r', tableCell:'tbl-c', tableCellHeader:'tbl-h',
+  tableCellSelected:'sel-cell',
+  /* Prism token names -> the short classes styled in the page's CSS */
+  codeHighlight:{
+    comment:'tk-c', prolog:'tk-c', doctype:'tk-c', cdata:'tk-c',
+    punctuation:'tk-p', namespace:'tk-p',
+    property:'tk-n', tag:'tk-k', boolean:'tk-n', number:'tk-n', constant:'tk-n',
+    symbol:'tk-n', deleted:'tk-s', selector:'tk-s', 'attr-name':'tk-n',
+    string:'tk-s', char:'tk-s', builtin:'tk-f', inserted:'tk-s',
+    operator:'tk-o', entity:'tk-o', url:'tk-s', variable:'tk-n',
+    atrule:'tk-k', 'attr-value':'tk-s', keyword:'tk-k', 'class-name':'tk-f',
+    function:'tk-f', regex:'tk-s', important:'tk-k'
+  }
+};
+
+/* ── Extra nodes the bundle does not ship ──────────
+   A horizontal rule is a leaf block with no children, so it is a DecoratorNode whose
+   decoration is the <hr> itself. Without it every "---" in an opened markdown file was
+   silently dropped on the way into the editor. */
+let HorizontalRuleNode = null, $createHorizontalRuleNode = null, $isHorizontalRuleNode = null;
+function defineExtraNodes({ core }){
+  if (HorizontalRuleNode) return;
+  class HR extends core.DecoratorNode {
+    static getType(){ return 'horizontalrule'; }
+    static clone(n){ return new HR(n.__key); }
+    static importJSON(){ return $createHorizontalRuleNode(); }
+    static importDOM(){
+      return { hr: () => ({ conversion: () => ({ node: $createHorizontalRuleNode() }), priority: 0 }) };
+    }
+    exportJSON(){ return { type:'horizontalrule', version:1 }; }
+    exportDOM(){ return { element: document.createElement('hr') }; }
+    createDOM(){ return document.createElement('hr'); }
+    updateDOM(){ return false; }
+    getTextContent(){ return '\n'; }
+    isInline(){ return false; }
+    decorate(){ return null; }
+  }
+  HorizontalRuleNode = HR;
+  $createHorizontalRuleNode = () => core.$applyNodeReplacement(new HR());
+  $isHorizontalRuleNode = n => n instanceof HR;
+}
+
+/* ── Toolbar building blocks ──────────────────────── */
+const IS_MAC = /Mac|iPod|iPhone|iPad/.test(navigator.platform || '');
+const MOD = IS_MAC ? '⌘' : 'Ctrl';
+/* "Bold" + "b" -> "Bold (Ctrl+B)", so every button advertises its shortcut */
+const withKey = (title, keys) => keys ? `${title} (${keys})` : title;
+
+/* Shared builder for the top toolbar. An item is either a ready-made element or
+   [label, fn, title, opts]; a null fn draws a separator. */
+function buildToolbar(bar, items){
+  for (const item of items){
+    if (item instanceof HTMLElement){ bar.appendChild(item); continue; }
+    const [label, fn, title, opts] = item;
+    if (!fn){ const s = document.createElement('div'); s.className = 'tb-sep'; bar.appendChild(s); continue; }
+    const b = document.createElement('button');
+    b.className = 'tb'; b.type = 'button'; b.innerHTML = label;
+    if (title) b.title = title;
+    if (opts && opts.toggle) b.setAttribute('aria-pressed', 'false');
+    if (opts && opts.label) b.setAttribute('aria-label', opts.label);
+    else if (title) b.setAttribute('aria-label', title.replace(/\s*\([^)]*\)\s*$/, ''));
+    b.addEventListener('mousedown', e => e.preventDefault());
+    b.addEventListener('click', fn);
+    bar.appendChild(b);
+  }
+}
+/* One tab stop for the whole toolbar, arrows to move inside it - the pattern screen
+   readers and keyboard users expect from a toolbar, instead of 25 tab stops. */
+function rovingToolbar(bar){
+  bar.setAttribute('role', 'toolbar');
+  const stops = () => [...bar.querySelectorAll('button,select,input,.tb-pick-btn')]
+    .filter(el => !el.disabled && el.offsetParent !== null);
+  const paint = active => stops().forEach(el => { el.tabIndex = el === active ? 0 : -1; });
+  const first = () => { const s = stops(); if (s.length) paint(s[0]); };
+  first();
+  bar.addEventListener('focusin', e => { if (stops().includes(e.target)) paint(e.target); });
+  bar.addEventListener('keydown', e => {
+    const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1
+              : e.key === 'Home' ? 'first' : e.key === 'End' ? 'last' : 0;
+    if (!dir) return;
+    const s = stops();
+    if (!s.length) return;
+    const i = s.indexOf(document.activeElement);
+    const next = dir === 'first' ? s[0] : dir === 'last' ? s[s.length - 1]
+               : s[(Math.max(i, 0) + dir + s.length) % s.length];
+    e.preventDefault(); paint(next); next.focus();
+  });
+  return { refresh: first };
+}
+
+/* Icons, drawn inline so they inherit the toolbar colour and stay crisp. */
+const SVG = b => '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">' + b + '</svg>';
+const SVGL = b => '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + b + '</svg>';
+const LIST_BARS = x => [3, 7.15, 11.3]
+  .map(y => '<rect x="' + x + '" y="' + y + '" width="' + (15 - x) + '" height="1.7" rx=".85"/>').join('');
+const LIST_ITEMS = [
+  { value: '',   label: 'No list',
+    icon: SVG('<rect x="1" y="3" width="14" height="1.7" rx=".85"/>' +
+              '<rect x="1" y="7.15" width="14" height="1.7" rx=".85"/>' +
+              '<rect x="1" y="11.3" width="9" height="1.7" rx=".85"/>') },
+  { value: 'ul', label: 'Bullet',
+    icon: SVG([3.85, 8, 12.15].map(cy => '<circle cx="2.4" cy="' + cy + '" r="1.5"/>').join('') +
+              LIST_BARS(6)) },
+  { value: 'ol', label: 'Number',
+    icon: SVG([[5.9, '1'], [10.05, '2'], [14.2, '3']].map(([y, d]) =>
+                '<text x="2.6" y="' + y + '" font-size="6.2" font-weight="700" text-anchor="middle"' +
+                ' font-family="ui-monospace,monospace">' + d + '</text>').join('') +
+              LIST_BARS(6)) },
+  { value: 'check', label: 'Checklist',
+    icon: SVG([2.15, 6.3, 10.45].map(y =>
+                '<rect x="1" y="' + y + '" width="3.6" height="3.6" rx=".9" fill="none" ' +
+                'stroke="currentColor" stroke-width="1.2"/>').join('') + LIST_BARS(6.6)) }
+];
+const ALIGN_ITEMS = [
+  { value: 'left',    label: 'Left',    icon: SVG(alignBars([15, 10, 15, 9], 1)) },
+  { value: 'center',  label: 'Center',  icon: SVG(alignBars([14, 9, 14, 8], 'c')) },
+  { value: 'right',   label: 'Right',   icon: SVG(alignBars([15, 10, 15, 9], 'r')) },
+  { value: 'justify', label: 'Justify', icon: SVG(alignBars([14, 14, 14, 14], 1)) }
+];
+function alignBars(widths, mode){
+  return widths.map((w, i) => {
+    const x = mode === 'c' ? (16 - w) / 2 : mode === 'r' ? 15 - w : 1;
+    return '<rect x="' + x + '" y="' + (2.4 + i * 3.4) + '" width="' + w + '" height="1.6" rx=".8"/>';
+  }).join('');
+}
+
+const ICON = {
+  undo:   SVGL('<path d="M3 8.2h6.6a3.2 3.2 0 1 1 0 6.4H6"/><path d="M5.6 5.4 3 8.2l2.6 2.8"/>'),
+  redo:   SVGL('<path d="M13 8.2H6.4a3.2 3.2 0 1 0 0 6.4H10"/><path d="M10.4 5.4 13 8.2l-2.6 2.8"/>'),
+  link:   SVGL('<path d="M6.7 9.3a2.6 2.6 0 0 0 3.9.3l2-2a2.6 2.6 0 0 0-3.7-3.7l-1.1 1.1"/>' +
+               '<path d="M9.3 6.7a2.6 2.6 0 0 0-3.9-.3l-2 2a2.6 2.6 0 0 0 3.7 3.7l1.1-1.1"/>'),
+  unlink: SVGL('<path d="M6.7 9.3a2.6 2.6 0 0 0 2.2.7"/><path d="M9.3 6.7a2.6 2.6 0 0 0-3.9-.3l-2 2a2.6 2.6 0 0 0 3.1 4"/>' +
+               '<path d="M10.6 5.9l1.1-1.1a2.6 2.6 0 0 1 3.7 3.7l-1.4 1.4"/><path d="m2.4 2.4 11.2 11.2"/>'),
+  table:  SVGL('<rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.2"/>' +
+               '<path d="M1.8 6.3h12.4M1.8 9.8h12.4M6 2.8v10.4M10 2.8v10.4"/>'),
+  hr:     SVG('<rect x="1" y="7.2" width="14" height="1.6" rx=".8"/>' +
+              '<rect x="2.5" y="2.6" width="11" height="1.2" rx=".6" opacity=".35"/>' +
+              '<rect x="2.5" y="12.2" width="11" height="1.2" rx=".6" opacity=".35"/>'),
+  codeblk: SVGL('<rect x="1.6" y="2.6" width="12.8" height="10.8" rx="1.3"/>' +
+               '<path d="M6.2 6.4 4.4 8l1.8 1.6M9.8 6.4 11.6 8l-1.8 1.6"/>'),
+  indent: SVG('<rect x="1" y="2.2" width="14" height="1.6" rx=".8"/>' +
+              '<rect x="6" y="6" width="9" height="1.6" rx=".8"/>' +
+              '<rect x="6" y="9.2" width="9" height="1.6" rx=".8"/>' +
+              '<rect x="1" y="12.4" width="14" height="1.6" rx=".8"/>' +
+              '<path d="M1 6.2 3.6 8.4 1 10.6z"/>'),
+  outdent: SVG('<rect x="1" y="2.2" width="14" height="1.6" rx=".8"/>' +
+              '<rect x="6" y="6" width="9" height="1.6" rx=".8"/>' +
+              '<rect x="6" y="9.2" width="9" height="1.6" rx=".8"/>' +
+              '<rect x="1" y="12.4" width="14" height="1.6" rx=".8"/>' +
+              '<path d="M3.6 6.2 1 8.4l2.6 2.2z"/>'),
+  find:   SVGL('<circle cx="7.1" cy="7.1" r="4.3"/><path d="m10.4 10.4 3.2 3.2"/>'),
+  clear:  SVGL('<path d="M6.4 12.6h7.2"/><path d="M2.6 9.9 6.2 13.5 13.2 6.5 9.6 2.9z"/><path d="m5 6.1 3.6 3.6"/>'),
+  /* Two blocks parting at a dashed line — the split-at-the-caret button */
+  split:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" ' +
+          'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+          '<rect x="2.5" y="1.8" width="11" height="4.1" rx="1"/>' +
+          '<rect x="2.5" y="10.1" width="11" height="4.1" rx="1"/>' +
+          '<path d="M1.2 8h2.6M6.7 8h2.6M12.2 8h2.6"/></svg>'
+};
+
+/* Toolbar dropdown that shows an icon beside each option - a native <select> renders
+   only plain text in its <option>s. items: [{ value, label, icon }] */
+function iconSelect(title, items, onPick, opt){
+  const o = opt || {};
+  const wrap = document.createElement('div');
+  wrap.className = 'tb-pick'; wrap.title = title;
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'tb-pick-btn';
+  btn.setAttribute('aria-haspopup', 'listbox');
+  btn.setAttribute('aria-label', title);
+  btn.innerHTML = '<span class="ico"></span><span class="lbl' + (o.wide ? ' w' : '') + '"></span>' +
+                  '<span class="caret">▾</span>';
+  const menu = document.createElement('div');
+  menu.className = 'tb-pick-menu' + (o.wide ? ' wide' : '');
+  menu.hidden = true; menu.setAttribute('role', 'listbox');
+  wrap.append(btn, menu);
+
+  let value = items[0].value;
+  const opts = items.map(it => {
+    const el = document.createElement('button');
+    el.type = 'button'; el.className = 'tb-pick-opt' + (it.kbd ? ' kbd' : '');
+    el.setAttribute('role', 'option'); el.tabIndex = -1;
+    if (it.kbd) el.dataset.kbd = it.kbd;
+    if (it.style) el.style.cssText = it.style;
+    el.innerHTML = '<span class="ico">' + (it.icon || '') + '</span>' +
+                   '<span class="lbl">' + it.label + '</span>';
+    el.addEventListener('click', () => { open(false); btn.focus(); set(it.value); onPick(it.value); });
+    menu.appendChild(el);
+    return el;
+  });
+  function set(v){
+    const it = items.find(i => i.value === v) || items[0];
+    value = it.value;
+    btn.querySelector('.ico').innerHTML = it.icon || '';
+    btn.querySelector('.lbl').textContent = it.label;
+    opts.forEach((el, i) => {
+      const on = items[i].value === value;
+      el.classList.toggle('on', on);
+      el.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+  }
+  /* Close on an outside click or Escape. The listeners only live while the menu is
+     open, so a destroyed editor leaves nothing behind on document. */
+  function onDocDown(e){ if (!wrap.contains(e.target)) open(false); }
+  function onDocKey(e){
+    if (e.key === 'Escape'){ e.stopPropagation(); open(false); btn.focus(); return; }
+    if (!menu.contains(document.activeElement) && document.activeElement !== btn) return;
+    const dir = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
+    if (!dir && e.key !== 'Home' && e.key !== 'End') return;
+    e.preventDefault(); e.stopPropagation();
+    const i = opts.indexOf(document.activeElement);
+    const next = e.key === 'Home' ? opts[0] : e.key === 'End' ? opts[opts.length - 1]
+               : opts[(Math.max(i, 0) + dir + opts.length) % opts.length];
+    next.focus();
+  }
+  function open(on){
+    menu.hidden = !on;
+    btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+    const bind = on ? 'addEventListener' : 'removeEventListener';
+    document[bind]('mousedown', onDocDown, true);
+    document[bind]('keydown', onDocKey, true);
+    if (on) (opts.find(el => el.classList.contains('on')) || opts[0]).focus();
+  }
+  btn.addEventListener('click', () => open(menu.hidden));
+  btn.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' '){ e.preventDefault(); open(true); }
+  });
+  /* keep the caret where it is, exactly like the plain toolbar buttons */
+  wrap.addEventListener('mousedown', e => { if (e.target !== btn || menu.hidden) e.preventDefault(); });
+  open(false); set(value);
+  return { el: wrap, set, get: () => value, close: () => open(false) };
+}
+function toolbarNote(text){
+  const n = document.createElement('span');
+  n.className = 'tb-note';
+  n.textContent = text; return n;
+}
+/* Bare URLs the auto-link transform picks up as they are typed */
+const URL_RE = /(?:https?:\/\/|www\.)[^\s<>()[\]{}"']+[^\s<>()[\]{}"'.,;:!?]/;
+const prettyHtml = h => (h || '').replace(/></g, '>\n<');
+
+/* "color"/"background-color"/"font-*" helpers shared by the editor and the MD converters */
+function styleMap(css){
+  const out = {};
+  for (const part of (css || '').split(';')){
+    const i = part.indexOf(':');
+    if (i < 0) continue;
+    const k = part.slice(0, i).trim().toLowerCase(), v = part.slice(i + 1).trim();
+    if (k && v) out[k] = v;
+  }
+  return out;
+}
+/* Double quotes would end the style="…" attribute mdText() writes it into, and a font
+   stack is the one value that usually carries them. */
+const styleText = m => Object.entries(m)
+  .map(([k, v]) => k + ': ' + String(v).replace(/"/g, "'")).join('; ');
+/* Only the properties that survive a markdown round trip, in a stable order */
+function inlineStyle(el){
+  const m = {};
+  for (const p of STYLE_PROPS){ const v = el.style && el.style.getPropertyValue(p); if (v) m[p] = v.trim(); }
+  return styleText(m);
+}
+/* input[type=color] only accepts #rrggbb, but the stored value may be rgb()/#rgb */
+function toHex(v){
+  const t = String(v || '').trim();
+  let m = /^#([0-9a-f]{3})$/i.exec(t);
+  if (m) return '#' + [...m[1]].map(c => c + c).join('').toLowerCase();
+  m = /^#([0-9a-f]{6})$/i.exec(t);
+  if (m) return '#' + m[1].toLowerCase();
+  m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(t);
+  if (m) return '#' + m.slice(1, 4)
+    .map(x => Math.max(0, Math.min(255, Math.round(+x))).toString(16).padStart(2, '0')).join('');
+  return null;
+}
+
+const FONTS = [
+  { value: '',                              label: 'Default' },
+  { value: 'Malgun Gothic, sans-serif',     label: '맑은 고딕' },
+  { value: 'Noto Sans KR, sans-serif',      label: 'Noto Sans' },
+  { value: 'Batang, serif',                 label: '바탕' },
+  { value: 'Georgia, serif',                label: 'Georgia' },
+  { value: 'Arial, Helvetica, sans-serif',  label: 'Arial' },
+  { value: 'Consolas, ui-monospace, monospace', label: 'Consolas' }
+];
+const SIZES = ['', '11px', '12px', '13px', '14.5px', '16px', '18px', '22px', '28px', '36px'];
+
+function mountLexical(shell, node, markDirty, onSplit){
+  const { core, rich, list, code, link, html, table, hist, util, sel } = LEX;
+
+  const bar = document.createElement('div'); bar.className = 'lex-toolbar';
+  const holder = document.createElement('div'); holder.style.position = 'relative';
+  const input = document.createElement('div');
+  input.className = 'lex-input'; input.contentEditable = 'true';
+  input.setAttribute('role','textbox'); input.setAttribute('aria-multiline','true');
+  input.setAttribute('aria-label','Body editor');
+  input.spellcheck = true;                      // the browser's own spell checker, as elsewhere
+  /* HTML source view: a gutter of line numbers beside the textarea */
+  const srcWrap = document.createElement('div');
+  srcWrap.className = 'src-wrap'; srcWrap.hidden = true;
+  const gutter = document.createElement('div'); gutter.className = 'src-gutter'; gutter.setAttribute('aria-hidden','true');
+  const source = document.createElement('textarea');
+  source.className = 'md-input'; source.spellcheck = false;
+  source.setAttribute('aria-label','HTML source');
+  srcWrap.append(gutter, source);
+  holder.append(input, srcWrap);
+  shell.append(bar, holder);
+
+  /* Lexical's built-in <span> import drops inline color/background-color/font, so every HTML
+     round-trip (save -> reopen, HTML source toggle) would wipe them. This override keeps
+     them while still honouring the bold/italic/... styles the built-in one reads. */
+  function convertStyledSpan(el){
+    const st = el.style;
+    const dec = (st.textDecoration || '').split(' ');
+    const marks = [
+      ['bold', st.fontWeight === 'bold' || +st.fontWeight >= 600],
+      ['italic', st.fontStyle === 'italic'],
+      ['strikethrough', dec.includes('line-through')],
+      ['underline', dec.includes('underline')]
+    ];
+    const styles = styleMap(inlineStyle(el));
+    return {
+      node: null,
+      forChild: child => {
+        if (!core.$isTextNode(child)) return child;
+        for (const [fmt, on] of marks) if (on && !child.hasFormat(fmt)) child.toggleFormat(fmt);
+        const own = styleMap(child.getStyle());
+        /* a nested span already set the property; the inner one wins */
+        for (const [k, v] of Object.entries(styles)) if (!(k in own)) own[k] = v;
+        child.setStyle(styleText(own));
+        return child;
+      }
+    };
+  }
+
+  const editor = core.createEditor({
+    namespace: 'callout9',
+    theme: LEX_THEME,
+    onError: e => console.error(e),
+    html: { import: { span: () => ({ conversion: convertStyledSpan, priority: 1 }) } },
+    nodes: [rich.HeadingNode, rich.QuoteNode, list.ListNode, list.ListItemNode,
+            code.CodeNode, code.CodeHighlightNode, link.LinkNode, link.AutoLinkNode,
+            table.TableNode, table.TableRowNode, table.TableCellNode, HorizontalRuleNode]
+  });
+  editor.setRootElement(input);
+
+  const off = [];                                  // everything destroy() has to unwind
+  off.push(rich.registerRichText(editor));
+  off.push(hist.registerHistory(editor, hist.createEmptyHistoryState(), 300));
+  /* Without this the INSERT_*_LIST_COMMAND dispatches below have no handler */
+  off.push(list.registerList(editor));
+  /* Prism is in the bundle; without this a code block stays unhighlighted plain text */
+  off.push(code.registerCodeHighlighting(editor));
+  off.push(registerLinks(editor));
+  off.push(registerTables(editor));
+  off.push(registerChecklist(editor));
+  off.push(registerTabIndent(editor));
+  off.push(registerMarkdownShortcuts(editor));
+  off.push(registerPlainPaste(editor));
+
+  /* HTML -> editing state */
+  function loadHtml(src){
+    editor.update(() => {
+      const dom = new DOMParser().parseFromString(src || '<p><br></p>', 'text/html');
+      const parsed = html.$generateNodesFromDOM(editor, dom);
+      const root = core.$getRoot();
+      root.clear();
+      for (const n of parsed){
+        if (core.$isElementNode(n) || core.$isDecoratorNode(n)) root.append(n);
+        else { const p = core.$createParagraphNode(); p.append(n); root.append(p); }
+      }
+      if (root.getChildrenSize() === 0) root.append(core.$createParagraphNode());
+    }, { tag:'history-merge' });
+  }
+  /* Editing state -> HTML */
+  function serializeHtml(){
+    let out = '';
+    editor.getEditorState().read(() => { out = html.$generateHtmlFromNodes(editor, null); });
+    return out;
+  }
+
+  loadHtml(node.html || mdToHtml(node.markdown));
+
+  off.push(editor.registerUpdateListener(({ dirtyElements, dirtyLeaves, tags }) => {
+    if (tags.has('history-merge')) return;
+    if (dirtyElements.size || dirtyLeaves.size) markDirty();
+  }));
+  source.addEventListener('input', () => { markDirty(); paintGutter(); });
+
+  /* ── HTML source view ─────────────────────────────── */
+  let sourceMode = false;
+  const paintGutter = () => {
+    const n = source.value.split('\n').length;
+    gutter.textContent = Array.from({ length: n }, (_, i) => i + 1).join('\n');
+  };
+  function setSourceMode(on){
+    sourceMode = on;
+    srcWrap.hidden = !on;
+    input.hidden  = on;
+    findBar.hidden = true;
+    tbBtn.src.classList.toggle('on', on);
+    tbBtn.src.setAttribute('aria-pressed', String(on));
+    /* every rich-text control is meaningless while raw HTML is on screen */
+    for (const el of bar.querySelectorAll('button,select,input,.tb-pick-btn'))
+      if (el !== tbBtn.src) el.disabled = on;
+    /* undo/redo answer to the history, not to this switch */
+    if (!on){ tbBtn.undo.disabled = !canUndo; tbBtn.redo.disabled = !canRedo; }
+    roving.refresh();
+  }
+  function toggleSource(){
+    if (!sourceMode){
+      source.value = prettyHtml(serializeHtml());
+      paintGutter();
+      setSourceMode(true);
+      source.focus();
+    } else {
+      loadHtml(source.value);
+      setSourceMode(false);
+      input.focus();
+    }
+  }
+  /* Tab inserts a real tab instead of leaving the field, the way a code editor behaves */
+  source.addEventListener('keydown', e => {
+    if (e.key !== 'Tab' || e.ctrlKey || e.metaKey || e.altKey) return;
+    e.preventDefault();
+    const { selectionStart: a, selectionEnd: b, value: v } = source;
+    source.value = v.slice(0, a) + '  ' + v.slice(b);
+    source.selectionStart = source.selectionEnd = a + 2;
+    markDirty(); paintGutter();
+  });
+
+  /* ── Links ────────────────────────────────────────── */
+  function registerLinks(ed){
+    const un = [
+      ed.registerCommand(link.TOGGLE_LINK_COMMAND, payload => {
+        link.$toggleLink(payload);
+        return true;
+      }, core.COMMAND_PRIORITY_EDITOR),
+      /* Ctrl/⌘ + click opens the target, the way every editor with links behaves */
+      ed.registerCommand(core.CLICK_COMMAND, e => {
+        if (!(e.ctrlKey || e.metaKey)) return false;
+        const a = e.target && e.target.closest && e.target.closest('a[href]');
+        if (!a) return false;
+        window.open(a.getAttribute('href'), '_blank', 'noopener');
+        return true;
+      }, core.COMMAND_PRIORITY_LOW),
+      /* Typing a bare URL turns it into a link, but only once a space closes the word -
+         linkifying mid-word would swallow the characters still being typed. */
+      ed.registerNodeTransform(core.TextNode, textNode => {
+        if (!textNode.isSimpleText()) return;
+        const parent = textNode.getParent();
+        if (!parent || link.$isLinkNode(parent) || link.$isAutoLinkNode(parent)) return;
+        if (code.$isCodeNode(parent) || textNode.hasFormat('code')) return;
+        const text = textNode.getTextContent();
+        const m = URL_RE.exec(text);
+        if (!m || !/^\s/.test(text.slice(m.index + m[0].length))) return;
+        const target = m[0];
+        let mid = textNode;
+        if (m.index > 0) mid = textNode.splitText(m.index)[1];
+        if (mid.getTextContent().length > target.length) mid.splitText(target.length);
+        const auto = link.$createAutoLinkNode(target.startsWith('www.') ? 'https://' + target : target);
+        mid.replace(auto);
+        auto.append(core.$createTextNode(target));
+      })
+    ];
+    return () => un.forEach(f => f());
+  }
+
+  /* ── Tables ───────────────────────────────────────── */
+  /* applyTableHandlers() is what gives a table drag-select across cells, Tab between
+     cells, arrow-key exit and column resizing. It is per table element, so it is wired
+     up as tables appear and torn down as they go. */
+  function registerTables(ed){
+    const live = new Map();
+    const un = [
+      ed.registerCommand(table.INSERT_TABLE_COMMAND, ({ rows, columns, includeHeaders }) => {
+        const t = table.$createTableNodeWithDimensions(+rows, +columns, includeHeaders !== false);
+        util.$insertNodeToNearestRoot(t);
+        const first = t.getFirstDescendant();
+        if (first) first.selectStart();
+        return true;
+      }, core.COMMAND_PRIORITY_EDITOR),
+      ed.registerMutationListener(table.TableNode, muts => {
+        const fresh = [];
+        for (const [key, kind] of muts){
+          if (kind === 'destroyed'){ live.get(key)?.(); live.delete(key); continue; }
+          if (!live.has(key)) fresh.push(key);
+        }
+        if (!fresh.length) return;
+        /* the node handle is read inside the editor state, the wiring happens outside it */
+        const found = [];
+        ed.getEditorState().read(() => {
+          for (const key of fresh){
+            const n = core.$getNodeByKey(key), el = ed.getElementByKey(key);
+            if (n && el) found.push([key, n, el]);
+          }
+        });
+        for (const [key, n, el] of found){
+          try {
+            const obs = table.applyTableHandlers(n, el, ed, true);
+            live.set(key, () => { try { obs.removeListeners(); } catch(_){} });
+          } catch(err){ console.warn('table handlers could not be attached', err); }
+        }
+      })
+    ];
+    return () => { un.forEach(f => f()); live.forEach(f => f()); live.clear(); };
+  }
+  const tableOp = fn => editor.update(() => {
+    const s = core.$getSelection();
+    if (!core.$isRangeSelection(s) && !table.$isTableSelection(s)) return;
+    try { fn(); } catch(err){ toast('That does not work outside a table.', true); }
+  });
+
+  /* ── Checklist ────────────────────────────────────── */
+  /* registerList() handles bullets and numbers; the check variant and the click-to-tick
+     behaviour are the part the bundle leaves to the host. */
+  function registerChecklist(ed){
+    const un = [
+      ed.registerCommand(list.INSERT_CHECK_LIST_COMMAND, () => {
+        list.insertList(ed, 'check');
+        return true;
+      }, core.COMMAND_PRIORITY_LOW),
+      ed.registerCommand(core.CLICK_COMMAND, e => {
+        const li = e.target && e.target.closest && e.target.closest('li.li-o, li.li-x');
+        if (!li) return false;
+        /* only the marker toggles; clicking the label should place the caret */
+        if (e.clientX > li.getBoundingClientRect().left) return false;
+        const n = core.$getNearestNodeFromDOMNode(li);
+        if (!list.$isListItemNode(n)) return false;
+        n.toggleChecked();
+        return true;
+      }, core.COMMAND_PRIORITY_LOW)
+    ];
+    return () => un.forEach(f => f());
+  }
+
+  /* ── Tab indents, Shift+Tab outdents ──────────────── */
+  function registerTabIndent(ed){
+    return ed.registerCommand(core.KEY_TAB_COMMAND, e => {
+      const s = core.$getSelection();
+      if (!core.$isRangeSelection(s)) return false;
+      /* inside a table Tab moves to the next cell - that handler runs first */
+      if (util.$findMatchingParent(s.anchor.getNode(), n => table.$isTableCellNode(n))) return false;
+      e.preventDefault();
+      ed.dispatchCommand(e.shiftKey ? core.OUTDENT_CONTENT_COMMAND : core.INDENT_CONTENT_COMMAND, undefined);
+      return true;
+    }, core.COMMAND_PRIORITY_LOW);
+  }
+
+  /* ── Markdown shortcuts ───────────────────────────── */
+  /* "# " turns the line into a heading, "- " into a bullet, "> " into a quote and so on -
+     the typing rhythm anyone who writes markdown expects. Runs on the space that closes
+     the marker, and Ctrl+Z right after puts the literal text back. */
+  const BLOCK_SHORTCUTS = [
+    [/^(#{1,6})$/,        (m, ed) => blockAt(() => rich.$createHeadingNode('h' + m[1].length))],
+    [/^>$/,               ()      => blockAt(() => rich.$createQuoteNode())],
+    [/^[-*+]$/,           (m, ed) => ed.dispatchCommand(list.INSERT_UNORDERED_LIST_COMMAND, undefined)],
+    [/^\[[ xX]?\]$/,      (m, ed) => ed.dispatchCommand(list.INSERT_CHECK_LIST_COMMAND, undefined)],
+    [/^\d{1,9}[.)]$/,     (m, ed) => ed.dispatchCommand(list.INSERT_ORDERED_LIST_COMMAND, undefined)]
+  ];
+  function registerMarkdownShortcuts(ed){
+    const un = [
+      ed.registerCommand(core.KEY_SPACE_COMMAND, () => {
+        const s = core.$getSelection();
+        if (!core.$isRangeSelection(s) || !s.isCollapsed()) return false;
+        const n = s.anchor.getNode();
+        if (!core.$isTextNode(n) || n.getIndexWithinParent() !== 0) return false;
+        const block = n.getParent();
+        if (!block || !core.$isParagraphNode(block)) return false;
+        const head = n.getTextContent().slice(0, s.anchor.offset);
+        for (const [re, run] of BLOCK_SHORTCUTS){
+          const m = re.exec(head);
+          if (!m) continue;
+          n.spliceText(0, head.length, '', true);      // the marker itself is consumed
+          run(m, ed);
+          return true;
+        }
+        return false;
+      }, core.COMMAND_PRIORITY_LOW),
+      /* "```" or "---" on a line of its own, closed with Enter */
+      ed.registerCommand(core.KEY_ENTER_COMMAND, e => {
+        const s = core.$getSelection();
+        if (!core.$isRangeSelection(s) || !s.isCollapsed()) return false;
+        const block = s.anchor.getNode().getTopLevelElement();
+        if (!block || !core.$isParagraphNode(block)) return false;
+        const text = block.getTextContent();
+        const fence = /^(`{3,}|~{3,})([A-Za-z0-9_+#-]*)$/.exec(text);
+        if (fence){
+          if (e) e.preventDefault();
+          const c = code.$createCodeNode(fence[2] || undefined);
+          block.replace(c);
+          c.selectStart();
+          return true;
+        }
+        if (/^(-{3,}|\*{3,}|_{3,})$/.test(text)){
+          if (e) e.preventDefault();
+          const hr = $createHorizontalRuleNode(), p = core.$createParagraphNode();
+          block.replace(hr);
+          hr.insertAfter(p);            // the caret carries on below the rule, not at the end
+          p.selectStart();
+          return true;
+        }
+        return false;
+      }, core.COMMAND_PRIORITY_LOW)
+    ];
+    return () => un.forEach(f => f());
+  }
+
+  /* ── Paste without formatting (Ctrl/⌘ + Shift + V) ── */
+  function registerPlainPaste(ed){
+    return ed.registerCommand(core.PASTE_COMMAND, e => {
+      if (!plainPasteArmed) return false;
+      plainPasteArmed = false;
+      const text = e.clipboardData && e.clipboardData.getData('text/plain');
+      if (text == null) return false;
+      e.preventDefault();
+      ed.update(() => {
+        const s = core.$getSelection();
+        if (core.$isRangeSelection(s)) s.insertRawText(text);
+      });
+      return true;
+    }, core.COMMAND_PRIORITY_CRITICAL);
+  }
+  let plainPasteArmed = false, armT = 0;
+  input.addEventListener('keydown', e => {
+    if (!((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'v')) return;
+    plainPasteArmed = true;
+    /* if the paste never arrives (the OS swallowed it, the clipboard was empty) the arming
+       must not sit there and turn the next ordinary Ctrl+V into a plain one */
+    clearTimeout(armT);
+    armT = setTimeout(() => { plainPasteArmed = false; }, 1000);
+  });
+
+  /* ── Split below the caret's line ───────────────────
+     The line the caret is on stays here whole; everything below it leaves this editor and
+     is handed to onSplit(), which keeps it in a new sibling node. */
+  const NOTHING_AFTER = 'There is nothing below this line to split off.';
+  /* Parked between the two halves: it marks the boundary in the serialized HTML, and it
+     also keeps the halves from growing back together — the list plugin merges two lists
+     that end up side by side, which would undo the split of a list. */
+  const MARK = '⁣__SPLIT__⁣';
+  const topLevel = src => {
+    const doc = new DOMParser().parseFromString(src || '', 'text/html');
+    return [...doc.body.children].map(el => el.outerHTML);
+  };
+  /* Where the tail begins, as (element, child index): right after the caret's line. A line
+     ends at the next line break inside its block, and a block with no break left in it is a
+     line of its own — then the cut moves up, out of every block it sits at the end of. */
+  function lineEnd(point){
+    let block, from;
+    if (point.type === 'text'){
+      /* climb out of any inline wrapper (a link), so the block holding the breaks is found */
+      let child = point.getNode(), p = child.getParent();
+      while (p && core.$isElementNode(p) && p.isInline()){ child = p; p = child.getParent(); }
+      block = p; from = child.getIndexWithinParent() + 1;
+    } else {
+      block = point.getNode(); from = point.offset;
+    }
+    if (!block) return { parent:null, index:0, block:null };
+    if (core.$isRootOrShadowRoot(block)) return { parent:block, index:from, block };
+
+    const kids = block.getChildren();
+    let index = kids.length;                          // no break below: the block is the line
+    for (let i = from; i < kids.length; i++)
+      if (core.$isLineBreakNode(kids[i])){ index = i + 1; break; }
+
+    let parent = block;
+    while (parent && !core.$isRootOrShadowRoot(parent) && index >= parent.getChildrenSize()){
+      index = parent.getIndexWithinParent() + 1;
+      parent = parent.getParent();
+    }
+    return { parent, index, block };
+  }
+  /* The table cell (or any other shadow root) the caret sits in, if any. A cell cannot be
+     cut in half and left in two nodes, so a caret inside one splits below the whole table. */
+  function shadowHost(n){
+    for (let p = n; p; p = p.getParent())
+      if (core.$isRootOrShadowRoot(p) && p.getParent()) return p;
+    return null;
+  }
+  /* The top-level block a node belongs to. getTopLevelElement() stops at the nearest
+     shadow root, which inside a table is the cell or the row rather than the table. */
+  function topBlock(n){
+    const rootKey = core.$getRoot().getKey();
+    let cur = n;
+    while (cur && cur.getParent() && cur.getParent().getKey() !== rootKey) cur = cur.getParent();
+    return cur && cur.getParent() ? cur : null;
+  }
+  /* → { tail } with the HTML below the caret's line, or { err } with the reason it did not
+       run. The editor keeps that line and everything above it. */
+  function splitAtCaret(){
+    if (sourceMode) return { err:'Leave the HTML source view before splitting.' };
+    let err = null, markKey = null;
+    /* discrete, so the split is committed before the serializing read below */
+    editor.update(() => {
+      const s = core.$getSelection();
+      if (!core.$isRangeSelection(s)){ err = 'Put the caret where the text should be split.'; return; }
+      const root = core.$getRoot();
+      const point = s.isBackward() ? s.focus : s.anchor;    // a selection splits at its start
+      let tailIndex;
+      const cell = shadowHost(point.getNode());
+      if (cell){                                           // in a table: the table stays here
+        const top = topBlock(cell);
+        if (!top){ err = 'Could not work out where to split.'; return; }
+        tailIndex = top.getIndexWithinParent() + 1;
+        if (tailIndex >= root.getChildrenSize()){ err = NOTHING_AFTER; return; }
+      } else {
+        const { parent, index, block } = lineEnd(point);
+        if (!parent){ err = 'Could not work out where to split.'; return; }
+        if (parent.getKey() === root.getKey()){            // the cut falls between two blocks
+          if (index >= root.getChildrenSize()){ err = NOTHING_AFTER; return; }
+          tailIndex = index;
+        } else {
+          /* splits the line's block, and every block around it, up to the top level */
+          tailIndex = core.$splitNode(parent, index)[1].getIndexWithinParent();
+          if (parent.getKey() === block.getKey()){
+            /* the break that closed the line is the last thing in the head now — drop it */
+            const last = block.getLastChild();
+            if (last && core.$isLineBreakNode(last)) last.remove();
+          }
+        }
+      }
+      const tailTop = root.getChildAtIndex(tailIndex);
+      if (!tailTop){ err = NOTHING_AFTER; return; }
+      const mark = core.$createParagraphNode();
+      mark.append(core.$createTextNode(MARK));
+      tailTop.insertBefore(mark);
+      markKey = mark.getKey();
+    }, { discrete:true });
+    if (err) return { err };
+    if (!markKey) return { err:'Could not work out where to split.' };
+
+    /* Serialized in one piece, then cut at the marker: whatever follows it is the tail. */
+    const full = topLevel(serializeHtml());
+    const at = full.findIndex(s => s.includes(MARK));
+    editor.update(() => {
+      const mark = core.$getNodeByKey(markKey);
+      if (!mark) return;
+      const root = core.$getRoot();
+      const rest = root.getChildren().slice(mark.getIndexWithinParent());
+      (at < 0 ? [mark] : rest).forEach(n => n.remove());    // the marker, and the tail with it
+      if (root.getChildrenSize() === 0) root.append(core.$createParagraphNode());
+      root.selectEnd();
+    }, { discrete:true });
+    if (at < 0) return { err:'Could not split the text.' };
+    input.focus();
+    return { tail: full.slice(at + 1).join('\n') };
+  }
+  function runSplit(){
+    const r = splitAtCaret();
+    if (r.err){ toast(r.err, true); return; }
+    onSplit?.(r.tail);
+  }
+
+  /* ── Commands the toolbar drives ──────────────────── */
+  const blockAt = factory => editor.update(() => {
+    const s = core.$getSelection();
+    if (core.$isRangeSelection(s)) sel.$setBlocksType(s, factory);
+  });
+  const fmt = f => { editor.dispatchCommand(core.FORMAT_TEXT_COMMAND, f); input.focus(); };
+  const align = a => { editor.dispatchCommand(core.FORMAT_ELEMENT_COMMAND, a); input.focus(); };
+  const cmd = (c, arg) => { editor.dispatchCommand(c, arg); input.focus(); };
+  /* Quote is a toggle: pressing it inside a quote drops back to a plain paragraph,
+     the same way the list picker turns a list off again. */
+  const inQuote = () => {
+    const s = core.$getSelection();
+    return core.$isRangeSelection(s) && rich.$isQuoteNode(s.anchor.getNode().getTopLevelElement());
+  };
+  const inCode = () => {
+    const s = core.$getSelection();
+    return core.$isRangeSelection(s) && code.$isCodeNode(s.anchor.getNode().getTopLevelElement());
+  };
+  function toggleQuote(){
+    let on = false;
+    editor.getEditorState().read(() => { on = inQuote(); });
+    blockAt(() => on ? core.$createParagraphNode() : rich.$createQuoteNode());
+    input.focus();
+  }
+  function toggleCodeBlock(){
+    let on = false;
+    editor.getEditorState().read(() => { on = inCode(); });
+    blockAt(() => on ? core.$createParagraphNode() : code.$createCodeNode());
+    input.focus();
+  }
+  /* Strips every character format, the inline colour/font styles and the block type in
+     one go - the ✕ button used to clear only the two colours. */
+  function clearFormatting(){
+    editor.update(() => {
+      const s = core.$getSelection();
+      if (!core.$isRangeSelection(s)) return;
+      for (const f of ['bold','italic','underline','strikethrough','code','subscript','superscript','highlight'])
+        if (s.hasFormat(f)) s.formatText(f);
+      sel.$patchStyleText(s, Object.fromEntries(STYLE_PROPS.map(p => [p, null])));
+      for (const n of s.getNodes()){
+        if (core.$isTextNode(n)){ n.setFormat(0); n.setStyle(''); }
+        const l = util.$findMatchingParent(n, p => link.$isLinkNode(p) || link.$isAutoLinkNode(p));
+        if (l){ const kids = l.getChildren(); kids.forEach(k => l.insertBefore(k)); l.remove(); }
+      }
+    });
+    /* a list or a quote is a block format too, so the block type goes back to Body */
+    editor.dispatchCommand(list.REMOVE_LIST_COMMAND, undefined);
+    blockAt(() => core.$createParagraphNode());
+    input.focus();
+  }
+
+  /* ── Link editing popover ─────────────────────────── */
+  const pop = document.createElement('div');
+  pop.className = 'link-pop'; pop.hidden = true;
+  const popIn = document.createElement('input');
+  popIn.type = 'url'; popIn.placeholder = 'https://…'; popIn.spellcheck = false;
+  popIn.setAttribute('aria-label', 'Link target');
+  const popOk = document.createElement('button');
+  popOk.className = 't-btn'; popOk.type = 'button'; popOk.textContent = '✓'; popOk.title = 'Apply';
+  const popDel = document.createElement('button');
+  popDel.className = 't-btn'; popDel.type = 'button'; popDel.innerHTML = ICON.unlink; popDel.title = 'Remove link';
+  pop.append(popIn, popOk, popDel);
+  holder.appendChild(pop);
+
+  let popRange = null;                              // the selection the popover is editing
+  function currentLink(){
+    let href = null;
+    editor.getEditorState().read(() => {
+      const s = core.$getSelection();
+      if (!core.$isRangeSelection(s)) return;
+      const l = util.$findMatchingParent(s.anchor.getNode(), n => link.$isLinkNode(n) || link.$isAutoLinkNode(n));
+      if (l) href = l.getURL();
+    });
+    return href;
+  }
+  function openLinkPop(){
+    if (sourceMode) return;
+    let empty = true;
+    editor.getEditorState().read(() => {
+      const s = core.$getSelection();
+      empty = !core.$isRangeSelection(s) || (s.isCollapsed() && !currentLink());
+    });
+    if (empty){ toast('Select the text to turn into a link first.', true); return; }
+    popRange = editor.getEditorState().read(() => {
+      const s = core.$getSelection();
+      return core.$isRangeSelection(s) ? s.clone() : null;
+    });
+    popIn.value = currentLink() || '';
+    const r = window.getSelection();
+    const box = r && r.rangeCount ? r.getRangeAt(0).getBoundingClientRect() : null;
+    const host = holder.getBoundingClientRect();
+    pop.hidden = false;
+    pop.style.top  = ((box ? box.bottom - host.top : 60) + 6) + 'px';
+    pop.style.left = Math.max(6, Math.min((box ? box.left - host.left : 20),
+                                          holder.clientWidth - pop.offsetWidth - 6)) + 'px';
+    popIn.focus(); popIn.select();
+  }
+  function applyLink(url){
+    editor.update(() => {
+      if (popRange) core.$setSelection(popRange.clone());
+      editor.dispatchCommand(link.TOGGLE_LINK_COMMAND, url);
+    });
+    pop.hidden = true; input.focus();
+  }
+  popOk.addEventListener('click', () => {
+    const v = popIn.value.trim();
+    if (!v){ toast('Enter a link target.', true); return; }
+    applyLink(/^[a-z][\w+.-]*:|^[#/]/i.test(v) ? v : 'https://' + v);
+  });
+  popDel.addEventListener('click', () => applyLink(null));
+  popIn.addEventListener('keydown', e => {
+    if (e.key === 'Enter'){ e.preventDefault(); popOk.click(); }
+    if (e.key === 'Escape'){ e.preventDefault(); pop.hidden = true; input.focus(); }
+  });
+  pop.addEventListener('mousedown', e => { if (e.target !== popIn) e.preventDefault(); });
+
+  /* ── Find and replace ─────────────────────────────── */
+  /* Works on the rendered text of the editable area: the hits are painted with the browser's
+     own highlight ranges, and a replace re-runs through Lexical so it lands in the undo
+     history like any other edit. */
+  const findBar = document.createElement('div');
+  findBar.className = 'find-bar'; findBar.hidden = true;
+  findBar.innerHTML =
+    '<input class="q" placeholder="Find" aria-label="Find">' +
+    '<span class="hits">0/0</span>' +
+    '<button class="btn sm" data-go="-1" title="Previous (Shift+Enter)">↑</button>' +
+    '<button class="btn sm" data-go="1" title="Next (Enter)">↓</button>' +
+    '<input class="r" placeholder="Replace with" aria-label="Replace with">' +
+    '<button class="btn sm" data-act="one">Replace</button>' +
+    '<button class="btn sm" data-act="all">All</button>' +
+    '<label><input type="checkbox" class="cs">Aa</label>' +
+    '<button class="btn sm" data-act="close" title="Close (Esc)">✕</button>';
+  holder.insertBefore(findBar, holder.firstChild);
+  const fq = findBar.querySelector('.q'), fr = findBar.querySelector('.r'),
+        fcs = findBar.querySelector('.cs'), fhits = findBar.querySelector('.hits');
+  let hits = [], hitAt = -1;
+
+  /* Every text node in the editable area, with the running offset of its first character */
+  function textRuns(){
+    const runs = [];
+    const walk = document.createTreeWalker(input, NodeFilter.SHOW_TEXT);
+    let at = 0;
+    for (let n = walk.nextNode(); n; n = walk.nextNode()){
+      runs.push({ node:n, at, len:n.nodeValue.length });
+      at += n.nodeValue.length;
+    }
+    return { runs, text: runs.map(r => r.node.nodeValue).join('') };
+  }
+  function runFind(keepAt){
+    const q = fq.value;
+    hits = [];
+    if (q){
+      const { runs, text } = textRuns();
+      const hay = fcs.checked ? text : text.toLowerCase();
+      const needle = fcs.checked ? q : q.toLowerCase();
+      for (let i = hay.indexOf(needle); i >= 0; i = hay.indexOf(needle, i + needle.length))
+        hits.push({ start:i, end:i + needle.length, runs });
+    }
+    hitAt = hits.length ? Math.min(keepAt === true ? Math.max(hitAt, 0) : 0, hits.length - 1) : -1;
+    paintHits();
+  }
+  function rangeFor(hit){
+    const pick = off => {
+      const r = hit.runs.find(x => off >= x.at && off <= x.at + x.len);
+      return r ? [r.node, off - r.at] : null;
+    };
+    const a = pick(hit.start), b = pick(hit.end);
+    if (!a || !b) return null;
+    const r = document.createRange();
+    r.setStart(a[0], a[1]); r.setEnd(b[0], b[1]);
+    return r;
+  }
+  /* CSS Custom Highlight where the browser has it, and a plain selection otherwise */
+  const HL = window.Highlight && CSS.highlights ? new Highlight() : null;
+  if (HL) CSS.highlights.set('c9-find', HL);
+  function paintHits(){
+    if (HL) HL.clear();
+    fhits.textContent = (hits.length ? hitAt + 1 : 0) + '/' + hits.length;
+    if (!hits.length) return;
+    if (HL) for (const h of hits){ const r = rangeFor(h); if (r) HL.add(r); }
+    const cur = rangeFor(hits[hitAt]);
+    if (!cur) return;
+    const s = window.getSelection();
+    s.removeAllRanges(); s.addRange(cur);
+    const el = cur.startContainer.parentElement;
+    if (el && el.scrollIntoView) el.scrollIntoView({ block:'nearest' });
+  }
+  function step(d){
+    if (!hits.length) return;
+    hitAt = (hitAt + d + hits.length) % hits.length;
+    paintHits();
+  }
+  function replaceOne(){
+    if (hitAt < 0 || !hits[hitAt]) return;
+    const r = rangeFor(hits[hitAt]);
+    if (!r) return;
+    const s = window.getSelection();
+    s.removeAllRanges(); s.addRange(r);
+    input.focus();
+    editor.update(() => {
+      const lex = core.$getSelection();
+      if (core.$isRangeSelection(lex)) lex.insertText(fr.value);
+    });
+    setTimeout(() => runFind(true), 0);
+  }
+  /* Done inside the editor state rather than over DOM ranges: one undo step, and no stale
+     node handles. A hit that straddles two runs (half of it bold, say) is left for
+     Replace, which works off the live selection. */
+  function replaceAll(){
+    const q = fq.value;
+    if (!q) return;
+    const cs = fcs.checked;
+    const needle = cs ? q : q.toLowerCase();
+    let n = 0;
+    editor.update(() => {
+      for (const tn of core.$nodesOfType(core.TextNode)){
+        if (!tn.isSimpleText()) continue;
+        const t = tn.getTextContent();
+        const hay = cs ? t : t.toLowerCase();
+        if (!hay.includes(needle)) continue;
+        let out = '', i = 0;
+        for (let k = hay.indexOf(needle); k >= 0; k = hay.indexOf(needle, k + needle.length)){
+          out += t.slice(i, k) + fr.value; i = k + needle.length; n++;
+        }
+        tn.setTextContent(out + t.slice(i));
+      }
+    }, { discrete:true });
+    toast(n ? 'Replaced ' + n + '.' : 'Nothing to replace.', !n);
+    setTimeout(() => runFind(), 0);
+  }
+  function openFind(on){
+    if (on && sourceMode){ toast('Leave the HTML source view to search.', true); return; }
+    findBar.hidden = !on;
+    tbBtn.find.classList.toggle('on', on);
+    tbBtn.find.setAttribute('aria-pressed', String(on));
+    if (on){ fq.focus(); fq.select(); runFind(); }
+    else { if (HL) HL.clear(); hits = []; input.focus(); }
+  }
+  fq.addEventListener('input', () => runFind());
+  fcs.addEventListener('change', () => runFind());
+  fq.addEventListener('keydown', e => {
+    if (e.key === 'Enter'){ e.preventDefault(); step(e.shiftKey ? -1 : 1); }
+    if (e.key === 'Escape'){ e.preventDefault(); openFind(false); }
+  });
+  fr.addEventListener('keydown', e => {
+    if (e.key === 'Enter'){ e.preventDefault(); replaceOne(); }
+    if (e.key === 'Escape'){ e.preventDefault(); openFind(false); }
+  });
+  findBar.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.go) step(+b.dataset.go);
+    else if (b.dataset.act === 'one') replaceOne();
+    else if (b.dataset.act === 'all') replaceAll();
+    else if (b.dataset.act === 'close') openFind(false);
+  });
+
+  /* ── Table size picker ────────────────────────────── */
+  function askTable(){
+    const spec = prompt('Table size — rows x columns', '3x3');
+    if (spec == null) return;
+    const m = /^\s*(\d{1,2})\s*[x*,\s]\s*(\d{1,2})\s*$/i.exec(spec);
+    if (!m){ toast('Enter the size as rows x columns, for example 3x4.', true); return; }
+    const [rows, cols] = [+m[1], +m[2]];
+    if (rows < 1 || cols < 1 || rows > 50 || cols > 20){
+      toast('Between 1x1 and 50x20, please.', true); return;
+    }
+    cmd(table.INSERT_TABLE_COMMAND, { rows, columns: cols, includeHeaders: true });
+  }
+
+  /* ── Toolbar ──────────────────────────────────────── */
+  /* Block type picker. A node body sits below the node's own heading in the generated
+     document, so H1-H3 are rarely what a body wants - they are offered all the same, and
+     shiftHeadings() moves the whole body under the node's heading level on export. */
+  const blockSel = document.createElement('select');
+  blockSel.className = 'tb-select';
+  blockSel.title = 'Block type';
+  blockSel.setAttribute('aria-label', 'Block type');
+  for (const [value, text] of [['p','Body'], ['h1','H1'], ['h2','H2'], ['h3','H3'],
+                               ['h4','H4'], ['h5','H5'], ['h6','H6'],
+                               ['quote','Quote'], ['code','Code']]){
+    const o = document.createElement('option');
+    o.value = value; o.textContent = text; blockSel.appendChild(o);
+  }
+  blockSel.addEventListener('change', () => {
+    const v = blockSel.value;
+    if (v === 'quote'){ blockAt(() => rich.$createQuoteNode()); }
+    else if (v === 'code'){ blockAt(() => code.$createCodeNode()); }
+    else blockAt(() => v === 'p' ? core.$createParagraphNode() : rich.$createHeadingNode(v));
+    input.focus();
+  });
+
+  const listPick = iconSelect('List type', LIST_ITEMS, value => {
+    const cmdFor = { ul: list.INSERT_UNORDERED_LIST_COMMAND,
+                     ol: list.INSERT_ORDERED_LIST_COMMAND,
+                     check: list.INSERT_CHECK_LIST_COMMAND }[value] || list.REMOVE_LIST_COMMAND;
+    cmd(cmdFor, undefined);
+  });
+  const alignPick = iconSelect('Text alignment', ALIGN_ITEMS, align);
+  const fontPick = iconSelect('Font', FONTS.map(f => ({
+    value: f.value, label: f.label, style: f.value ? 'font-family:' + f.value : ''
+  })), v => { style({ 'font-family': v || null }); input.focus(); }, { wide:true });
+  const sizePick = iconSelect('Font size', SIZES.map(s => ({
+    value: s, label: s || 'Default'
+  })), v => { style({ 'font-size': v || null }); input.focus(); });
+
+  /* Font / highlight colour. Applies to the selection, or to whatever is typed next
+     when the caret is collapsed. */
+  const style = props => editor.update(() => {
+    const s = core.$getSelection();
+    if (core.$isRangeSelection(s)) sel.$patchStyleText(s, props);
+  });
+  function colorPicker(glyph, prop, fallback, title){
+    const wrap = document.createElement('label');
+    wrap.className = 'tb-color'; wrap.title = title;
+    const ico = document.createElement('span'); ico.textContent = glyph;
+    const swatch = document.createElement('span'); swatch.className = 'swatch';
+    swatch.style.background = fallback;
+    const inp = document.createElement('input'); inp.type = 'color'; inp.value = fallback;
+    inp.setAttribute('aria-label', title);
+    wrap.append(ico, swatch, inp);
+    /* live swatch feedback while the OS picker is open, commit once it closes */
+    inp.addEventListener('input', () => { swatch.style.background = inp.value; });
+    inp.addEventListener('change', () => { style({ [prop]: inp.value }); input.focus(); });
+    return {
+      el: wrap,
+      sync(value){
+        swatch.style.background = value || fallback;
+        const hex = toHex(value);
+        if (hex) inp.value = hex;
+      }
+    };
+  }
+  const fgPick = colorPicker('A', 'color', '#182220', 'Font color');
+  const bgPick = colorPicker('▨', 'background-color', '#ffe58a', 'Highlight color');
+
+  const grp = els => { const g = document.createElement('div'); g.className = 'tb-grp'; els.forEach(e => g.appendChild(e)); return g; };
+  buildToolbar(bar, [
+    [ICON.undo, () => cmd(core.UNDO_COMMAND, undefined), withKey('Undo', MOD + '+Z')],
+    [ICON.redo, () => cmd(core.REDO_COMMAND, undefined), withKey('Redo', MOD + '+Shift+Z')],
+    ['|', null],
+    blockSel,
+    fontPick.el,
+    sizePick.el,
+    ['|', null],
+    ['<b>B</b>', () => fmt('bold'), withKey('Bold', MOD + '+B'), { toggle:true }],
+    ['<i>I</i>', () => fmt('italic'), withKey('Italic', MOD + '+I'), { toggle:true }],
+    ['<u>U</u>', () => fmt('underline'), withKey('Underline', MOD + '+U'), { toggle:true }],
+    ['<s>S</s>', () => fmt('strikethrough'), 'Strikethrough', { toggle:true }],
+    ['X<sup>2</sup>', () => fmt('superscript'), 'Superscript', { toggle:true }],
+    ['X<sub>2</sub>', () => fmt('subscript'), 'Subscript', { toggle:true }],
+    ['&lt;/&gt;', () => fmt('code'), 'Inline code', { toggle:true }],
+    ['|', null],
+    fgPick.el,
+    bgPick.el,
+    [ICON.clear, clearFormatting, 'Clear all formatting'],
+    ['|', null],
+    listPick.el,
+    alignPick.el,
+    [ICON.outdent, () => cmd(core.OUTDENT_CONTENT_COMMAND, undefined), withKey('Outdent', 'Shift+Tab')],
+    [ICON.indent, () => cmd(core.INDENT_CONTENT_COMMAND, undefined), withKey('Indent', 'Tab')],
+    ['❝', toggleQuote, 'Quote', { toggle:true, label:'Quote' }],
+    [ICON.codeblk, toggleCodeBlock, 'Code block', { toggle:true }],
+    ['|', null],
+    [ICON.link, openLinkPop, withKey('Link', MOD + '+K')],
+    [ICON.table, askTable, 'Insert table'],
+    [ICON.hr, () => editor.update(() => {
+       const s = core.$getSelection();
+       if (core.$isRangeSelection(s)) util.$insertNodeToNearestRoot($createHorizontalRuleNode());
+       input.focus();
+     }), 'Horizontal rule'],
+    ['|', null],
+    [ICON.find, () => openFind(findBar.hidden), withKey('Find and replace', MOD + '+F'), { toggle:true }],
+    [ICON.split, runSplit, 'Split below this line — the rest becomes the next node'],
+    ['HTML', toggleSource, 'View HTML source', { toggle:true }]
+  ]);
+  const byTitle = t => bar.querySelector('.tb[title^="' + t + '"]');
+  const tbBtn = {
+    bold: byTitle('Bold'), italic: byTitle('Italic'), underline: byTitle('Underline'),
+    strike: byTitle('Strikethrough'), sup: byTitle('Superscript'), sub: byTitle('Subscript'),
+    code: byTitle('Inline code'), quote: byTitle('Quote'), codeblk: byTitle('Code block'),
+    link: byTitle('Link'), find: byTitle('Find'), src: byTitle('View HTML source'),
+    undo: byTitle('Undo'), redo: byTitle('Redo')
+  };
+
+  const tail = document.createElement('div');
+  tail.className = 'tb-tail';
+  const counter = document.createElement('span');
+  counter.className = 'tb-count';
+  tail.append(counter, toolbarNote('Lexical · edit as HTML → save as MD'));
+  bar.appendChild(tail);
+  const roving = rovingToolbar(bar);
+
+  /* ── Keeping the toolbar in step with the caret ───── */
+  const setOn = (btn, on) => {
+    if (!btn) return;
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-pressed', String(!!on));
+  };
+  function syncToolbar(){
+    editor.getEditorState().read(() => {
+      const s = core.$getSelection();
+      if (!core.$isRangeSelection(s)) return;
+      const top = s.anchor.getNode().getTopLevelElement();
+      const tag = top && rich.$isHeadingNode(top) ? top.getTag()
+                : top && rich.$isQuoteNode(top)   ? 'quote'
+                : top && code.$isCodeNode(top)    ? 'code' : 'p';
+      blockSel.value = [...blockSel.options].some(o => o.value === tag) ? tag : 'p';
+
+      const ln = util.$getNearestNodeOfType(s.anchor.getNode(), list.ListNode);
+      const lt = ln && ln.getListType();
+      listPick.set(lt === 'number' ? 'ol' : lt === 'bullet' ? 'ul' : lt === 'check' ? 'check' : '');
+
+      const el = top && core.$isElementNode(top) ? top : null;
+      alignPick.set(el ? (['', 'left', 'center', 'right', 'justify'][el.getFormat()] || 'left') : 'left');
+
+      fgPick.sync(sel.$getSelectionStyleValueForProperty(s, 'color', ''));
+      bgPick.sync(sel.$getSelectionStyleValueForProperty(s, 'background-color', ''));
+      const fam = sel.$getSelectionStyleValueForProperty(s, 'font-family', '');
+      fontPick.set(FONTS.some(f => f.value === fam) ? fam : '');
+      const sz = sel.$getSelectionStyleValueForProperty(s, 'font-size', '');
+      sizePick.set(SIZES.includes(sz) ? sz : '');
+
+      /* every character format now lights up, not just the two that were easy to miss */
+      setOn(tbBtn.bold, s.hasFormat('bold'));
+      setOn(tbBtn.italic, s.hasFormat('italic'));
+      setOn(tbBtn.underline, s.hasFormat('underline'));
+      setOn(tbBtn.strike, s.hasFormat('strikethrough'));
+      setOn(tbBtn.sup, s.hasFormat('superscript'));
+      setOn(tbBtn.sub, s.hasFormat('subscript'));
+      setOn(tbBtn.code, s.hasFormat('code'));
+      setOn(tbBtn.quote, tag === 'quote');
+      setOn(tbBtn.codeblk, tag === 'code');
+      setOn(tbBtn.link, !!util.$findMatchingParent(s.anchor.getNode(),
+        n => link.$isLinkNode(n) || link.$isAutoLinkNode(n)));
+    });
+  }
+  /* Words and characters, from the plain text of the document */
+  function syncCount(){
+    let text = '';
+    editor.getEditorState().read(() => { text = core.$getRoot().getTextContent(); });
+    const words = (text.match(/[^\s]+/g) || []).length;
+    counter.textContent = words + 'w · ' + text.length + 'c';
+    counter.title = words + ' words, ' + text.length + ' characters';
+  }
+  /* One rAF per burst: the toolbar sync used to run on every keystroke's update, which is
+     the wrong amount of work for a long document. Counting walks the whole document, so
+     it waits for a pause in the typing instead. */
+  let pending = 0, countT = 0;
+  const scheduleSync = () => {
+    if (!pending) pending = requestAnimationFrame(() => { pending = 0; syncToolbar(); });
+    clearTimeout(countT);
+    countT = setTimeout(syncCount, 400);
+  };
+  off.push(editor.registerUpdateListener(scheduleSync));
+  off.push(editor.registerCommand(core.SELECTION_CHANGE_COMMAND, () => { scheduleSync(); return false; },
+                                  core.COMMAND_PRIORITY_LOW));
+  let canUndo = false, canRedo = false;
+  off.push(editor.registerCommand(core.CAN_UNDO_COMMAND, can => {
+    canUndo = can; if (!sourceMode) tbBtn.undo.disabled = !can;
+    return false;
+  }, core.COMMAND_PRIORITY_CRITICAL));
+  off.push(editor.registerCommand(core.CAN_REDO_COMMAND, can => {
+    canRedo = can; if (!sourceMode) tbBtn.redo.disabled = !can;
+    return false;
+  }, core.COMMAND_PRIORITY_CRITICAL));
+  tbBtn.undo.disabled = tbBtn.redo.disabled = true;
+  syncToolbar(); syncCount();
+
+  /* Shortcuts the browser does not hand to Lexical on its own */
+  function onKey(e){
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const k = e.key.toLowerCase();
+    if (k === 'k'){ e.preventDefault(); openLinkPop(); }
+    else if (k === 'f'){ e.preventDefault(); openFind(true); }
+    else if (k === 'h'){ e.preventDefault(); openFind(true); fr.focus(); }
+    else if (k === '\\'){ e.preventDefault(); clearFormatting(); }
+  }
+  shell.addEventListener('keydown', onKey);
+  shell.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !findBar.hidden){ e.preventDefault(); openFind(false); }
+  });
+
+  const getHtml = () => sourceMode ? source.value : serializeHtml();
+  return {
+    getHtml,
+    getMarkdown: () => htmlToMd(getHtml()),
+    focus: () => input.focus(),
+    destroy(){
+      if (pending) cancelAnimationFrame(pending);
+      clearTimeout(countT);
+      if (HL) HL.clear();
+      listPick.close(); alignPick.close(); fontPick.close(); sizePick.close();
+      off.forEach(f => { try { f(); } catch(_){} });
+      editor.setRootElement(null);
+    }
+  };
+}
+
+/* ══════════════════════════════════════════════════════════
+   7. AI calls
+   ══════════════════════════════════════════════════════════ */
+/* The dialog runs in two modes:
+   'text'  - the AI writes the manual body, saved as a Text node (the ✦ button)
+   'image' - the AI re-draws the same picture with red number labels taken from the
+             description just written, saved as an Image node. */
+const LABEL_PROMPT =
+  'Recreate the image by marking the locations indicated by each number in the attached description with red number labels.';
+const ASK_UI = {
+  text : { h:'Generate with AI', busy:'AI is writing the content…',
+           hint:'The image and the note are sent together, and the result is saved as a <b>Text</b> node under this one.' },
+  image: { h:'Label the image with AI', busy:'AI is drawing the image…',
+           hint:'The image, the note and the description just generated are sent together, and the image that comes back ' +
+                'is saved as an <b>Image</b> node under this one. The model must be able to return images.' }
+};
+/* Kept per mode so an edited note / model survives closing and reopening the dialog */
+const askMemos  = { text: $('#askMemo').value, image: LABEL_PROMPT };
+const askModels = { text: '', image: '' };
+
+/* Models offered in the dialog. `image` marks the ones that can draw a picture rather
+   than only read one - the labeling step is unusable without such a model. Whatever is
+   registered under “Register AI API” is added to the list too, so a model typed there
+   by hand can still be picked here. */
+const MODEL_CATALOG = {
+  builtin:   [{ id:'claude-sonnet-4-6' }],
+  anthropic: [{ id:'claude-sonnet-4-6' }],
+  openai:    [{ id:'gpt-4o' }, { id:'gpt-4o-mini' }, { id:'gpt-image-1', image:true }],
+  gemini:    [{ id:'gemini-3.6-flash' }, { id:'gemini-3.6-pro' }, { id:'gemini-2.5-flash-image', image:true }],
+  compatible:[]
+};
+const DRAWS = /image|dall-e/i;
+function modelChoices(mode){
+  const cat = MODEL_CATALOG[config.provider] || [];
+  const ids = cat.map(m => m.id);
+  for (const extra of [config.model, config.imageModel])
+    if (extra && !ids.includes(extra)) ids.push(extra);
+  if (mode !== 'image') return ids;
+  const draws = ids.filter(id => cat.find(m => m.id === id)?.image || DRAWS.test(id));
+  return draws.length ? draws : ids;      // nothing suitable: show all, the call reports why
+}
+function paintAskModels(mode){
+  const sel = $('#askModel');
+  const ids = modelChoices(mode);
+  sel.innerHTML = '';
+  for (const id of ids){
+    const o = document.createElement('option');
+    o.value = id; o.textContent = id;
+    sel.appendChild(o);
+  }
+  /* last pick if it is still on offer, otherwise the registered default for this mode */
+  const want = [askModels[mode],
+                mode === 'image' ? (config.imageModel || DEF_IMAGE_MODEL[config.provider]) : config.model]
+               .find(v => v && ids.includes(v));
+  sel.value = want || ids[0] || '';
+  sel.disabled = !ids.length;
+}
+
+let askTarget = null, askMode = 'text', askDesc = '';
+
+function paintAsk(){
+  $('#askH').textContent   = ASK_UI[askMode].h;
+  $('#askHint').innerHTML  = ASK_UI[askMode].hint;
+  $('#askMemo').value      = askMemos[askMode];
+  paintAskModels(askMode);
+}
+function showAsk(node, mode, desc){
+  askTarget = node; askMode = mode; askDesc = desc || '';
+  $('#askThumb').src = node.image;
+  $('#askFrom').textContent = node.name;
+  paintAsk();
+  $('#askScrim').hidden = false;
+  const memo = $('#askMemo'); memo.focus(); memo.select();
+}
+function openAsk(node){
+  if (!aiReady()){ toast(AI_NOT_REGISTERED, true); openApi(); return; }
+  /* Commit any in-progress image edit first so the AI receives the latest image */
+  if (currentEditor && currentEditor.node === node && state.dirty) currentEditor.save(true);
+  showAsk(node, 'text');
+}
+/* Offered right after a description is generated: re-draw the same image with the
+   numbers from that description marked on it. */
+function openLabelAsk(node, markdown){
+  if (!aiReady()){ toast(AI_NOT_REGISTERED, true); openApi(); return; }
+  showAsk(node, 'image', markdown);
+}
+$('#askSend').addEventListener('click', runAsk);
+$('#askMemo').addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runAsk();
+});
+
+async function runAsk(){
+  const node = askTarget, mode = askMode, desc = askDesc;
+  const memo = $('#askMemo').value.trim();
+  if (!node) return;
+  if (!memo){ toast('Enter a note to send to the AI.', true); $('#askMemo').focus(); return; }
+  if (!aiReady()){
+    toast(AI_NOT_REGISTERED, true);
+    $('#askScrim').hidden = true; openApi(); return;
+  }
+  const model = $('#askModel').value;
+  askMemos[mode] = memo;
+  askModels[mode] = model;
+  $('#askScrim').hidden = true;
+  const busy = currentEditor?.busy, fab = currentEditor?.fab;
+  if (busy){
+    const label = busy.querySelector('span');
+    if (label) label.textContent = ASK_UI[mode].busy;
+    busy.hidden = false;
+  }
+  if (fab) fab.hidden = true;
+
+  /* The follow-up prompt has to wait until the busy overlay is down, so it is only
+     recorded here and asked after the finally block. */
+  let labelFrom = null;
+  try {
+    if (mode === 'image'){
+      const { dataUrl, mime } = await callAIImage(node, memo, desc, model);
+      const child = {
+        id: uid(), type:'image', name:'Image' + (++state.imageSeq),
+        image: dataUrl, mime, memo, children: []
+      };
+      (node.children ||= []).push(child);
+      node.collapsed = false;
+      save();
+      state.selectedId = child.id; tree.render(); renderEditor();
+      toast(`Created node ${child.name}.`);
+    } else {
+      const markdown = await callAI(node, memo, model);
+      const html = mdToHtml(markdown);
+      /* Named after the first line that has any text in it, cut to SPLIT_TITLE_MAX */
+      const child = {
+        id: uid(), type:'text', name: splitTitle(html) || ('Text' + (++state.textSeq)),
+        markdown, html, memo, children: []
+      };
+      node.children.push(child);
+      node.collapsed = false;
+      save();
+      state.selectedId = child.id; tree.render(); renderEditor();
+      toast(`Created node ${child.name}.`);
+      labelFrom = markdown;
+    }
+  } catch(err){
+    console.error(err);
+    toast((mode === 'image' ? 'Labeling failed: ' : 'Generation failed: ') + err.message, true);
+  } finally {
+    if (busy) busy.hidden = true;
+    if (fab) fab.hidden = false;
+  }
+
+  if (labelFrom && confirm('Would you like to label the images based on the text?'))
+    openLabelAsk(node, labelFrom);
+}
+
+function splitDataURL(dataUrl){
+  const m = /^data:([^;,]+);base64,(.*)$/s.exec(dataUrl);
+  if (!m) throw new Error('Unrecognized image format.');
+  return { mime: m[1], b64: m[2] };
+}
+function stripFence(t){
+  const s = t.trim();
+  const m = /^```(?:markdown|md)?\s*\n([\s\S]*?)\n?```$/.exec(s);
+  return (m ? m[1] : s).trim();
+}
+
+/* `pick` is the model chosen in the dialog; without one the registered default is used
+   (the connection test calls this with no pick). */
+async function callAI(node, memo, pick){
+  const { mime, b64 } = splitDataURL(node.image);
+  const sys = config.system || DEFAULT_SYSTEM;
+  const p = config.provider;
+
+  if (p === 'builtin' || p === 'anthropic'){
+    const headers = { 'Content-Type':'application/json' };
+    if (p === 'anthropic'){
+      headers['x-api-key'] = config.apiKey;
+      headers['anthropic-version'] = '2023-06-01';
+      headers['anthropic-dangerous-direct-browser-access'] = 'true';
+    }
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers,
+      body: JSON.stringify({
+        model: pick || (p === 'builtin' ? 'claude-sonnet-4-6' : (config.model || 'claude-sonnet-4-6')),
+        max_tokens: p === 'builtin' ? 1000 : 4096,
+        system: sys,
+        messages: [{ role:'user', content:[
+          { type:'image', source:{ type:'base64', media_type: mime, data: b64 } },
+          { type:'text', text: memo }
+        ]}]
+      })
+    });
+    const data = await parseRes(res);
+    return stripFence((data.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n'));
+  }
+
+  if (p === 'gemini'){
+    const model = pick || config.model || 'gemini-3.6-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(config.apiKey)}`;
+    const res = await fetch(url, {
+      method:'POST', headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        systemInstruction:{ parts:[{ text: sys }] },
+        contents:[{ role:'user', parts:[ { inline_data:{ mime_type: mime, data: b64 } }, { text: memo } ] }]
+      })
+    });
+    const data = await parseRes(res);
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    return stripFence(parts.map(x => x.text || '').join('\n'));
+  }
+
+  // openai / compatible
+  const base = (p === 'openai' ? 'https://api.openai.com/v1' : (config.baseUrl || '')).replace(/\/+$/,'');
+  if (!base) throw new Error('Base URL is empty.');
+  const res = await fetch(base + '/chat/completions', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + config.apiKey },
+    body: JSON.stringify({
+      model: pick || config.model || 'gpt-4o-mini',
+      max_tokens: 4096,
+      messages:[
+        { role:'system', content: sys },
+        { role:'user', content:[
+          { type:'image_url', image_url:{ url: node.image } },
+          { type:'text', text: memo }
+        ]}
+      ]
+    })
+  });
+  const data = await parseRes(res);
+  return stripFence(data.choices?.[0]?.message?.content || '');
+}
+
+/* ── Image answers ──────────────────────────────────
+   Providers hand an image back in a different shape each (Anthropic image blocks,
+   Gemini inline_data, OpenAI b64_json, OpenAI-compatible servers a data: URL inside
+   the message). Rather than one branch per shape, the whole JSON is scanned for the
+   first base64 image that is not the picture we sent. */
+const IMAGE_SYSTEM =
+  'You edit images. Return the edited image itself as your answer; do not reply with text only.';
+const B64_RE = /^[A-Za-z0-9+/=\s]+$/;
+
+function imageFromText(t){
+  const m = /data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/i.exec(t || '');
+  if (!m) return null;
+  return { dataUrl: m[0], mime: /^data:([^;]+)/.exec(m[0])[1] };
+}
+function findImage(v, skipB64, depth = 0){
+  if (v == null || depth > 8) return null;
+  if (typeof v === 'string') return imageFromText(v);
+  if (Array.isArray(v)){
+    for (const x of v){ const r = findImage(x, skipB64, depth + 1); if (r) return r; }
+    return null;
+  }
+  if (typeof v !== 'object') return null;
+
+  const raw = v.b64_json || v.base64 || (typeof v.data === 'string' ? v.data : null);
+  if (raw && raw.length > 512 && B64_RE.test(raw)){
+    const b64 = raw.replace(/\s+/g, '');
+    if (b64 !== skipB64){                       // ignore the image we sent, echoed back
+      const t = v.mime_type || v.mimeType || v.media_type || v.mediaType || v.type;
+      const mime = (typeof t === 'string' && t.startsWith('image/')) ? t : 'image/png';
+      return { dataUrl: `data:${mime};base64,${b64}`, mime };
+    }
+  }
+  for (const k of Object.keys(v)){ const r = findImage(v[k], skipB64, depth + 1); if (r) return r; }
+  return null;
+}
+function dataUrlToBlob(dataUrl){
+  const { mime, b64 } = splitDataURL(dataUrl);
+  const bin = atob(b64);
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return new Blob([buf], { type: mime });
+}
+
+/* Sends the image plus the note and the description, and returns the picture that
+   comes back. Throws when the answer holds no image. */
+async function callAIImage(node, memo, desc, pick){
+  const p = config.provider;
+  if (!IMAGE_CAPABLE(p))
+    throw new Error('Claude cannot return images. Register Gemini or OpenAI under “Register AI API” and pick an image model.');
+
+  const { mime, b64 } = splitDataURL(node.image);
+  const prompt = desc ? `${memo}\n\n--- Description ---\n${desc}` : memo;
+  /* The labeling step uses its own model - the one that writes the manual usually reads
+     images but cannot draw them. */
+  const model = pick || config.imageModel || DEF_IMAGE_MODEL[p] || config.model || '';
+  let data, text = '';
+
+  if (p === 'gemini'){
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(config.apiKey)}`;
+    const body = {
+      contents:[{ role:'user', parts:[ { inline_data:{ mime_type: mime, data: b64 } }, { text: prompt } ] }],
+      generationConfig: { responseModalities:['TEXT','IMAGE'] }
+    };
+    const res = await fetch(url, {
+      method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body)
+    });
+    data = await parseRes(res);
+    text = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('\n');
+
+  } else {
+    const base = (p === 'openai' ? 'https://api.openai.com/v1' : (config.baseUrl || '')).replace(/\/+$/,'');
+    if (!base) throw new Error('Base URL is empty.');
+    if (/gpt-image|dall-e/i.test(model)){
+      /* A dedicated image model takes the picture as multipart form data, not JSON */
+      const fd = new FormData();
+      fd.append('model', model);
+      fd.append('prompt', prompt);
+      fd.append('image', dataUrlToBlob(node.image), 'image.png');
+      const res = await fetch(base + '/images/edits', {
+        method:'POST', headers:{ 'Authorization':'Bearer ' + config.apiKey }, body: fd
+      });
+      data = await parseRes(res);
+    } else {
+      const res = await fetch(base + '/chat/completions', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + config.apiKey },
+        body: JSON.stringify({
+          model: model || 'gpt-4o-mini',
+          max_tokens: 4096,
+          messages:[
+            { role:'system', content: IMAGE_SYSTEM },
+            { role:'user', content:[
+              { type:'image_url', image_url:{ url: node.image } },
+              { type:'text', text: prompt }
+            ]}
+          ]
+        })
+      });
+      data = await parseRes(res);
+      const c = data.choices?.[0]?.message?.content;
+      text = typeof c === 'string' ? c : '';
+    }
+  }
+
+  const img = findImage(data, b64);
+  if (!img){
+    const reply = text.trim().replace(/\s+/g, ' ').slice(0, 140);
+    throw new Error(`“${model}” answered without an image — pick a model that can draw ` +
+      `(e.g. gemini-2.5-flash-image, gpt-image-1) in the AI model box.` +
+      (reply ? ` Its reply: ${reply}` : ''));
+  }
+  return img;
+}
+
+async function parseRes(res){
+  const text = await res.text();
+  let data = null;
+  try { data = JSON.parse(text); } catch(_){}
+  if (!res.ok){
+    const msg = data?.error?.message || data?.message || text.slice(0,180) || res.statusText;
+    throw new Error(`${res.status} ${msg}`);
+  }
+  if (!data) throw new Error('Could not parse the response.');
+  return data;
+}
+
+/* ══════════════════════════════════════════════════════════
+   8. API settings screen
+   ══════════════════════════════════════════════════════════ */
+const HINTS = {
+  builtin:'Works only inside a Claude artifact and needs no key. If you download this file and run it locally, pick another provider.',
+  anthropic:'Example model: claude-sonnet-4-6 · calls go straight from the browser, so be careful where the key could be exposed.',
+  openai:'Example models: gpt-4o, gpt-4o-mini · the model must accept image input. Image model: gpt-image-1.',
+  gemini:'Example models: gemini-3.6-flash, gemini-3.6-pro · a plain text model cannot draw, so labeling needs an image model such as gemini-2.5-flash-image.',
+  compatible:'Uses an OpenAI-compatible endpoint. Enter the Base URL up to but not including /chat/completions. The server must allow CORS.'
+};
+const DEF_MODEL = { builtin:'claude-sonnet-4-6', anthropic:'claude-sonnet-4-6', openai:'gpt-4o', gemini:'gemini-3.6-flash', compatible:'' };
+/* Writing the manual and re-drawing the image are different jobs: a model that reads an
+   image is not necessarily able to return one, so the labeling step gets its own model.
+   Claude has no image output at all, hence the empty entries. */
+const DEF_IMAGE_MODEL = { builtin:'', anthropic:'', openai:'gpt-image-1', gemini:'gemini-2.5-flash-image', compatible:'' };
+const IMAGE_CAPABLE = p => p === 'gemini' || p === 'openai' || p === 'compatible';
+
+function syncApiForm(){
+  const p = $('#fProvider').value;
+  $('#wrapKey').hidden = (p === 'builtin');
+  $('#wrapBase').hidden = (p !== 'compatible');
+  $('#wrapImgModel').hidden = !IMAGE_CAPABLE(p);
+  $('#apiHint').textContent = HINTS[p];
+}
+$('#fProvider').addEventListener('change', () => {
+  const p = $('#fProvider').value;
+  if (!$('#fModel').value || Object.values(DEF_MODEL).includes($('#fModel').value)) $('#fModel').value = DEF_MODEL[p];
+  const im = $('#fImgModel');
+  if (!im.value || Object.values(DEF_IMAGE_MODEL).includes(im.value)) im.value = DEF_IMAGE_MODEL[p];
+  syncApiForm();
+});
+function openApi(){
+  $('#fProvider').value = config.provider;
+  $('#fModel').value = config.model || DEF_MODEL[config.provider];
+  $('#fImgModel').value = config.imageModel || DEF_IMAGE_MODEL[config.provider];
+  $('#fKey').value = config.apiKey || '';
+  $('#fSaveKey').checked = !!config.saveKey;
+  $('#fBase').value = config.baseUrl || '';
+  $('#fSystem').value = config.system || DEFAULT_SYSTEM;
+  syncApiForm();
+  $('#apiScrim').hidden = false;
+}
+$('#btnApi').addEventListener('click', openApi);
+
+function readApiForm(){
+  return {
+    provider: $('#fProvider').value,
+    model: $('#fModel').value.trim() || DEF_MODEL[$('#fProvider').value],
+    imageModel: $('#fImgModel').value.trim(),
+    apiKey: $('#fKey').value.trim(),
+    saveKey: $('#fSaveKey').checked,
+    baseUrl: $('#fBase').value.trim(),
+    system: $('#fSystem').value.trim() || DEFAULT_SYSTEM
+  };
+}
+$('#apiSave').addEventListener('click', async () => {
+  const next = readApiForm();
+  if (next.provider !== 'builtin' && !next.apiKey){ toast('Enter an API key.', true); return; }
+  if (next.provider === 'compatible' && !next.baseUrl){ toast('Enter a Base URL.', true); return; }
+  config = next;
+  await store.set(K_CONFIG, JSON.stringify(persistableConfig(config)));
+  paintApiState();
+  $('#apiScrim').hidden = true;
+  toast(next.provider === 'builtin' || next.saveKey
+    ? 'AI settings saved.'
+    : 'Saved. The key is kept in memory only and clears when you leave the page.');
+});
+$('#apiTest').addEventListener('click', async e => {
+  const btn = e.currentTarget, keep = config;
+  config = readApiForm();
+  btn.disabled = true; btn.textContent = 'Testing…';
+  const px = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  try {
+    await callAI({ image: px }, 'This image is only a connection test. Reply with just "Connection OK".');
+    toast('Connection succeeded.');
+  } catch(err){
+    toast('Connection failed: ' + err.message, true);
+  } finally {
+    config = keep; btn.disabled = false; btn.textContent = 'Test connection';
+  }
+});
+function paintApiState(){
+  const el = $('#apiState');
+  const label = { builtin:'Claude built-in', anthropic:'Anthropic', openai:'OpenAI', gemini:'Gemini', compatible:'Compatible server' }[config.provider];
+  const ready = aiReady();
+  el.className = 'api-state' + (ready ? '' : ' off');
+  el.textContent = ready ? `${label} · ${config.model}` : `${label} · no key`;
+  currentEditor?.setAIEnabled?.(ready);   // keep the open image editor's AI button in sync
+}
+
+/* ══════════════════════════════════════════════════════════
+   9. MD file generation
+   ══════════════════════════════════════════════════════════ */
+/* Shifts the heading levels inside a text node's body to match its tree depth
+   (level 1 node -> H1, level 2 -> H2 …). Relative heading structure is preserved. */
+function shiftHeadings(md, level){
+  const src = (md || '').replace(/\r\n?/g, '\n');
+  if (!src.trim()) return '';
+  const lines = src.split('\n');
+
+  let fence = false, min = 7;
+  for (const l of lines){
+    if (/^\s*```/.test(l)){ fence = !fence; continue; }
+    if (fence) continue;
+    const m = /^(#{1,6})\s+\S/.exec(l);
+    if (m) min = Math.min(min, m[1].length);
+  }
+  if (min === 7) return src.trim();            // no headings, leave it as is
+
+  const delta = level - min;
+  if (!delta) return src.trim();
+
+  fence = false;
+  return lines.map(l => {
+    if (/^\s*```/.test(l)){ fence = !fence; return l; }
+    if (fence) return l;
+    const m = /^(#{1,6})(\s+.*)$/.exec(l);
+    if (!m) return l;
+    return '#'.repeat(Math.min(6, Math.max(1, m[1].length + delta))) + m[2];
+  }).join('\n').trim();
+}
+
+function buildMarkdown(){
+  const out = [];                              // only tree content is emitted (no document title)
+  const rec = (list, depth) => {
+    for (const n of list){
+      const level = Math.min(depth + 1, 6);     // level 1 node -> H1, level 2 -> H2 …
+      const name = (n.name || '').trim();
+      if (n.type === 'image'){
+        // an image node contributes the picture only - its name stays as alt text
+        out.push(`![${name}](${n.image})`, '');
+      } else {
+        if (name) out.push(`${'#'.repeat(level)} ${name}`, '');   // a text node name becomes a heading
+        // push body headings one more level down so they nest under the node heading
+        const body = shiftHeadings(n.markdown, Math.min(level + 1, 6));
+        if (body) out.push(body, '');
+      }
+      if (n.children?.length) rec(n.children, depth + 1);
+    }
+  };
+  rec(state.nodes, 0);
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+}
+/* ── Preview (separate window) ───────────────────────── */
+const PREVIEW_CSS = `
+*{box-sizing:border-box}
+body{margin:0;background:#eceeed;color:#182220;line-height:1.75;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;
+  -webkit-font-smoothing:antialiased}
+.bar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;
+  padding:9px 16px;background:#ffffffee;border-bottom:1px solid #d5dbd8}
+.bar .who{font-size:12px;color:#6c7873}
+.bar .sp{margin-left:auto}
+.bar button{font:inherit;font-size:13px;border:1px solid #d5dbd8;background:#fff;color:#182220;
+  border-radius:5px;padding:6px 12px;cursor:pointer}
+.bar button:hover{background:#f6f8f7;border-color:#c3ccc8}
+.sheet{max-width:840px;margin:26px auto 70px;background:#fff;border:1px solid #d5dbd8;border-radius:8px;
+  padding:46px 54px;box-shadow:0 2px 12px rgba(20,30,28,.06)}
+.sheet>:first-child{margin-top:0}
+h1{font-size:27px;margin:0 0 .6em;padding-bottom:.35em;border-bottom:1px solid #e6eae8;font-weight:700}
+h2{font-size:21px;margin:1.7em 0 .5em;font-weight:700}
+h3{font-size:17px;margin:1.4em 0 .4em;font-weight:700}
+h4,h5,h6{font-size:15px;margin:1.2em 0 .4em;font-weight:700}
+p{margin:.7em 0}
+ul,ol{margin:.7em 0;padding-left:1.6em}
+li{margin:.25em 0}
+blockquote{margin:1em 0;padding:.5em 16px .5em 18px;border-left:3px solid #0d6b5f;border-radius:0 5px 5px 0;
+  background:#eef6f3;color:#20423c;font-style:italic}
+blockquote p{margin:.3em 0}
+img{max-width:100%;height:auto;display:block;margin:1em 0;border:1px solid #d5dbd8;border-radius:6px;background:#fff}
+table{border-collapse:collapse;margin:1em 0;font-size:14px;width:100%}
+th,td{border:1px solid #d5dbd8;padding:7px 11px;text-align:left;vertical-align:top}
+th{background:#f5f8f7;font-weight:650}
+code{font-family:ui-monospace,Consolas,"D2Coding",monospace;font-size:13px;background:#fbeee9;
+  border:1px solid #efd3c6;border-radius:3px;padding:1px 4px;color:#a8442a}
+pre{font-family:ui-monospace,Consolas,"D2Coding",monospace;font-size:13px;background:#f7f9f8;
+  border:1px solid #e6eae8;border-radius:6px;padding:14px 16px;overflow:auto;white-space:pre-wrap}
+pre code{background:none;border:none;padding:0;color:inherit}
+a{color:#0d6b5f}
+hr{border:none;border-top:1px solid #e6eae8;margin:1.8em 0}
+@media print{
+  body{background:#fff}
+  .bar{display:none}
+  .sheet{max-width:none;margin:0;border:none;border-radius:0;box-shadow:none;padding:0}
+}`;
+
+function previewDoc(){
+  const title = esc(state.title || 'Manual');
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+    '<title>' + title + ' · Preview</title><style>' + PREVIEW_CSS + '</style></head><body>' +
+    '<div class="bar"><span class="who">Preview · this is the generated MD file rendered as-is</span>' +
+    '<span class="sp"></span><button onclick="window.print()">Print / Save as PDF</button>' +
+    '<button onclick="window.close()">Close</button></div>' +
+    '<div class="sheet">' + mdToHtml(buildMarkdown()) + '</div></body></html>';
+}
+
+$('#btnPreview').addEventListener('click', () => {
+  flushEditor();
+  if (!state.nodes.length){ toast('There is nothing to preview.', true); return; }
+  const w = window.open('', 'callout9Preview');
+  if (!w){ toast('The popup was blocked. Please allow popups for this page.', true); return; }
+  w.document.open();
+  w.document.write(previewDoc());
+  w.document.close();
+  w.focus();
+});
+
+function clearProject(){
+  state.title = 'Manual';
+  state.nodes = [];
+  state.imageSeq = 0;
+  state.textSeq = 0;
+  state.selectedId = null;
+  state.dirty = false;
+}
+
+$('#btnNew').addEventListener('click', () => {
+  if (tree.countNodes() && !confirm('Everything in the current document will be deleted. Start a new document?')) return;
+  clearProject();
+  pushTreeUndo();          // a wipe this big has to be undoable
+  tree.render();
+  renderEditor();          // tear down any open editor and show the empty state
+  save();
+  toast('Started a new document.');
+});
+
+/* ══════════════════════════════════════════════════════════
+   9b. Open — an existing MD / AsciiDoc file becomes a tree
+   ══════════════════════════════════════════════════════════
+   H1-H3 become the tree nodes (nested by their level), the text under a heading is
+   kept in that node, and every image in it is added below it as an image node.
+   Deeper headings (H4-H6) stay inside the body, where shiftHeadings() puts them
+   back at the right level on export. */
+const ADOC_EXT = /\.(adoc|asciidoc|asc|ad)$/i;
+const DOC_EXT  = /\.(md|markdown|mdown|mkd|txt|adoc|asciidoc|asc|ad)$/i;
+const NAME_MAX = 60;
+
+/* ── AsciiDoc → Markdown ────────────────────────────
+   Only the subset a manual actually uses: headings, lists, images, links, tables,
+   verbatim / quote blocks and the inline marks. Anything else is carried over as text. */
+const adocAlt = at => (String(at || '').split(',')[0] || '').replace(/^["']|["']$/g, '').trim();
+function adocInline(s){
+  const code = [];
+  /* monospace runs are parked first, so no rule below rewrites what is inside them */
+  let t = s.replace(/`([^`]+)`/g, (_, c) => { code.push(c); return '\u0001' + (code.length - 1) + '\u0001'; });
+  t = t
+    .replace(/image:([^\s\[]+)\[([^\]]*)\]/g, (_, src, at) => `![${adocAlt(at)}](${src})`)
+    .replace(/(?:link|xref):([^\s\[]+)\[([^\]]*)\]/g, (_, url, txt) => `[${txt || url}](${url})`)
+    .replace(/(^|[\s(])(https?:\/\/[^\s\[\]]+)\[([^\]]*)\]/g, (_, p, url, txt) => `${p}[${txt || url}](${url})`)
+    .replace(/\*\*([^*]+)\*\*|\*([^*\n]+)\*/g, (_, a, b) => `**${a ?? b}**`)
+    .replace(/__([^_]+)__/g, '*$1*')
+    .replace(/(^|[\s(])_([^_\n]+)_/g, '$1*$2*');
+  return t.replace(/\u0001(\d+)\u0001/g, (_, i) => '`' + code[+i] + '`');
+}
+/* cols="1,1,2" / cols=3* → how many columns the table has */
+function adocCols(attr){
+  const m = /cols\s*=\s*"?([^"\]]+)"?/.exec(attr || '');
+  if (!m) return 0;
+  const v = m[1].trim();
+  const rep = /^(\d+)\s*\*/.exec(v);
+  return rep ? +rep[1] : v.split(',').length;
+}
+function adocToMd(src){
+  const lines = (src || '').replace(/\r\n?/g, '\n').split('\n');
+  const out = [];
+  let fence = null;      // delimiter that opened the verbatim block we are inside
+  let quote = false;     // inside a ____ quote block
+  let cells = null, cols = 0, attr = null;
+
+  const flushTable = () => {
+    if (!cells) return;
+    const n = cols || 1;
+    const rows = [];
+    for (let i = 0; i < cells.length; i += n) rows.push(cells.slice(i, i + n));
+    if (rows.length){
+      const head = rows[0];
+      while (head.length < n) head.push('');
+      out.push('| ' + head.map(c => c || ' ').join(' | ') + ' |',
+               '|' + head.map(() => ' --- ').join('|') + '|');
+      rows.slice(1).forEach(r => {
+        while (r.length < n) r.push('');
+        out.push('| ' + r.map(c => c || ' ').join(' | ') + ' |');
+      });
+      out.push('');
+    }
+    cells = null; cols = 0;
+  };
+
+  for (const raw of lines){
+    const l = raw.trimEnd();
+
+    if (fence){                                        // verbatim: only the closing line matters
+      if (l.trim() === fence){ out.push('```'); fence = null; }
+      else out.push(raw);
+      continue;
+    }
+    if (cells){                                        // inside |=== … |===
+      if (/^\|===/.test(l)){ flushTable(); continue; }
+      if (!l.trim()) continue;
+      if (/^\|/.test(l)){
+        const row = l.replace(/^\|/, '').split(/\s+\|/).map(c => adocInline(c.trim()));
+        if (!cols) cols = row.length;
+        cells.push(...row);
+      }
+      continue;
+    }
+
+    const dl = /^(-{4,}|\.{4,}|`{3,}|\+{4,}|_{4,}|\*{4,}|={4,})\s*$/.exec(l);
+    if (dl){
+      const d = dl[1];
+      if (/^[-.`+]/.test(d)){ out.push('```'); fence = d; }        // listing / literal / source
+      else if (d[0] === '_'){ quote = !quote; out.push(''); }      // quote block
+      /* ==== and **** only wrap other content — the delimiters themselves are dropped */
+      attr = null; continue;
+    }
+    if (/^\/\//.test(l)) continue;                                 // comment
+    if (/^:[^:\s][^:]*:/.test(l)) continue;                        // document attribute
+    if (/^\[[^\]]*\]\s*$/.test(l)){ attr = l; continue; }          // block attribute list
+    if (/^\|===/.test(l)){ cells = []; cols = adocCols(attr); attr = null; continue; }
+    if (!l.trim()){ out.push(''); continue; }
+
+    const h = /^(={1,6})\s+(.*)$/.exec(l);
+    if (h){ out.push('#'.repeat(h[1].length) + ' ' + adocInline(h[2].trim()), ''); attr = null; continue; }
+
+    const bi = /^image::([^\s\[]+)\[([^\]]*)\]\s*$/.exec(l);
+    if (bi){ out.push(`![${adocAlt(bi[2])}](${bi[1]})`, ''); attr = null; continue; }
+
+    const pre = quote ? '> ' : '';
+    let m = /^(\*{1,5})\s+(.*)$/.exec(l);                          // bullet list
+    if (m){ out.push(pre + '  '.repeat(m[1].length - 1) + '- ' + adocInline(m[2])); continue; }
+    m = /^(\.{1,5})\s+(.*)$/.exec(l);                              // numbered list
+    if (m){ out.push(pre + '  '.repeat(m[1].length - 1) + '1. ' + adocInline(m[2])); continue; }
+    m = /^-\s+(.*)$/.exec(l);
+    if (m){ out.push(pre + '- ' + adocInline(m[1])); continue; }
+    m = /^([^\s:][^\n]*?)::(\s+.*)?$/.exec(l);                     // labeled list
+    if (m){ out.push(pre + '- **' + adocInline(m[1].trim()) + '**' +
+                     (m[2] && m[2].trim() ? ': ' + adocInline(m[2].trim()) : '')); continue; }
+    m = /^(NOTE|TIP|IMPORTANT|WARNING|CAUTION):\s*(.*)$/.exec(l);  // admonition
+    if (m){ out.push(`> **${m[1]}:** ` + adocInline(m[2])); continue; }
+    m = /^\.(\S.*)$/.exec(l);                                      // block title
+    if (m){ out.push(pre + '**' + adocInline(m[1].trim()) + '**'); continue; }
+
+    out.push(pre + adocInline(l).replace(/ \+$/, '  '));           // ' +' is a hard line break
+  }
+  flushTable();
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/* ── Markdown → nodes ───────────────────────────── */
+/* A heading is a node name, so the inline markers around it are dropped */
+function headingText(s){
+  return (s || '')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/~~([^~]+)~~/g, '$1')
+    .replace(/\s+/g, ' ').trim().slice(0, NAME_MAX).trimEnd();
+}
+/* one space before an inline picture goes with it, so pulling it out of a sentence
+   does not leave a double space behind */
+const IMG_RE = /[ \t]?!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+["'(][^)]*)?\s*\)/g;
+/* The pictures leave the body and become image nodes, so they are not written twice */
+function extractImages(md){
+  const imgs = [];
+  const text = (md || '').replace(IMG_RE, (_, alt, src) => { imgs.push({ alt, src }); return ''; });
+  return { text: text.replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim(), imgs };
+}
+/* → { roots, made, pre }: the tree, one { node, lines } per heading in reading order,
+     and whatever came before the first heading. */
+function mdToNodes(md, seq){
+  const lines = (md || '').replace(/\r\n?/g, '\n').split('\n');
+  const roots = [], made = [], pre = [], stack = [];
+  let cur = null, fence = false;
+
+  for (const l of lines){
+    if (/^\s*(```|~~~)/.test(l)) fence = !fence;
+    const h = fence ? null : /^(#{1,3})\s+(.+?)\s*#*\s*$/.exec(l);
+    if (!h){ (cur ? cur.lines : pre).push(l); continue; }
+
+    const level = h[1].length;
+    const node = { id: uid(), type:'text', name: headingText(h[2]) || ('Text' + (++seq.text)),
+                   markdown:'', html:'', children: [] };
+    while (stack.length && stack[stack.length - 1].level >= level) stack.pop();
+    const parent = stack.length ? stack[stack.length - 1].node : null;
+    (parent ? parent.children : roots).push(node);
+    stack.push({ level, node });
+    cur = { node, lines: [] };
+    made.push(cur);
+  }
+  return { roots, made, pre };
+}
+
+/* ── Resolving the images a document points at ──────
+   A data: URL is already the picture. A relative path is matched, by file name, against
+   the image files picked alongside the document; an http(s) one is fetched when the
+   server allows it. Anything left unresolved keeps its original path, so the node still
+   exports the same reference it came in with. */
+const IMG_MIME = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif',
+                   webp:'image/webp', svg:'image/svg+xml', bmp:'image/bmp', avif:'image/avif' };
+function guessMime(src){
+  const d = /^data:([^;,]+)/i.exec(src || '');
+  if (d) return d[1];
+  const e = /\.([a-z0-9]+)(?:[?#]|$)/i.exec(src || '');
+  return IMG_MIME[(e ? e[1] : '').toLowerCase()] || 'image/png';
+}
+/* a hand-written path may hold a stray % that decodeURIComponent refuses */
+const unesc = s => { try { return decodeURIComponent(s); } catch(_){ return s; } };
+const baseName = p => unesc(String(p || '')).split(/[?#]/)[0].split(/[\\/]/).pop().toLowerCase();
+async function resolveImgSrc(src, assets){
+  if (/^data:/i.test(src)) return src;
+  const f = assets.get(baseName(src));
+  if (f){ try { return await fileToDataURL(f); } catch(_){} }
+  if (/^https?:\/\//i.test(src)){
+    try {
+      const r = await fetch(src);
+      if (r.ok) return await fileToDataURL(await r.blob());
+    } catch(_){}
+  }
+  return null;
+}
+
+async function openDocument(doc, assets){
+  const md = ADOC_EXT.test(doc.name) ? adocToMd(await doc.text()) : await doc.text();
+  const seq = { text: 0, image: 0 };            // names for anything the file left unnamed
+  const { roots, made, pre } = mdToNodes(md, seq);
+
+  /* Above the first heading: real text gets a node of its own, but a document that
+     merely opens with a picture keeps that picture as a top-level image node — there is
+     no text for a text node to hold. A null node means "hang the images off the root". */
+  const lead = pre.join('\n');
+  if (extractImages(lead).text){
+    const node = { id: uid(), type:'text', name:'', markdown:'', html:'', children: [] };
+    roots.unshift(node);
+    made.unshift({ node, lines: pre });
+  } else if (lead.trim()){
+    made.unshift({ node: null, lines: pre });
+  }
+  if (!made.length){ toast('The file has no headings or text to import.', true); return; }
+
+  let images = 0, unresolved = 0;
+  for (const s of made){
+    const { text, imgs } = extractImages(s.lines.join('\n'));
+    if (s.node){
+      s.node.markdown = text;
+      s.node.html = mdToHtml(text);
+      if (!s.node.name) s.node.name = splitTitle(s.node.html) || ('Text' + (++seq.text));
+    }
+    const pics = [];
+    for (const im of imgs){
+      const src = await resolveImgSrc(im.src, assets);
+      if (!src) unresolved++;
+      images++;
+      pics.push({
+        id: uid(), type:'image',
+        name: headingText(im.alt) || ('Image' + (++seq.image)),
+        image: src || im.src, mime: guessMime(src || im.src), children: []
+      });
+    }
+    /* the sub-sections are already in children; the pictures belong to this
+       node's own text, so they go in front of them */
+    (s.node ? s.node.children : roots).unshift(...pics);
+  }
+
+  clearProject();
+  state.textSeq = seq.text; state.imageSeq = seq.image;   // keep the counters the names above used
+  state.title = doc.name.replace(/\.[^.]+$/, '') || 'Manual';
+  state.nodes = roots;
+  tree.render();
+  if (roots.length) selectNode(roots[0].id); else renderEditor();
+  save();
+  toast(`Opened ${doc.name} · ${made.filter(s => s.node).length} text node(s), ${images} image(s)` +
+        (unresolved ? ` · ${unresolved} image file(s) could not be found — pick them together with the document.` : '.'),
+        !!unresolved);
+}
+
+$('#btnOpen').addEventListener('click', () => {
+  if (tree.countNodes() &&
+      !confirm('Everything in the current document will be replaced by the file you open. Continue?')) return;
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.md,.markdown,.mdown,.mkd,.adoc,.asciidoc,.asc,.ad,.txt,text/markdown,image/*';
+  /* the images a document refers to by a relative path can be picked along with it */
+  inp.multiple = true;
+  inp.onchange = async () => {
+    const files = [...inp.files];
+    if (!files.length) return;
+    const doc = files.find(f => DOC_EXT.test(f.name)) ||
+                files.find(f => !f.type.startsWith('image/'));
+    if (!doc){ toast('Select a Markdown (.md) or AsciiDoc (.adoc) file.', true); return; }
+    const assets = new Map();
+    for (const f of files) if (f !== doc) assets.set(f.name.toLowerCase(), f);
+    try { await openDocument(doc, assets); pushTreeUndo(); }
+    catch(err){ console.error(err); toast('Could not open the file: ' + err.message, true); }
+  };
+  inp.click();
+});
+
+$('#btnBuild').addEventListener('click', () => {
+  flushEditor();
+  if (!state.nodes.length){ toast('There are no nodes to export.', true); return; }
+  const md = buildMarkdown();
+  const blob = new Blob([md], { type:'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (state.title || 'Manual').replace(/[\\/:*?"<>|]/g,'_') + '.md';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+  toast('MD file downloaded. Images are embedded in the file.');
+});
+
+/* ══════════════════════════════════════════════════════════
+   10. Autosave / restore
+   ══════════════════════════════════════════════════════════ */
+let saveT = null;
+function save(){
+  clearTimeout(saveT);
+  saveT = setTimeout(async () => {
+    const payload = JSON.stringify({
+      title: state.title, imageSeq: state.imageSeq, textSeq: state.textSeq, nodes: state.nodes
+    });
+    if (payload.length > 4_500_000){ console.warn('Autosave skipped: payload too large'); return; }
+    await store.set(K_PROJECT, payload);
+  }, 700);
+}
+
+async function restore(){
+  try {
+    const raw = await store.get(K_CONFIG);
+    if (raw){
+      const saved = JSON.parse(raw);
+      /* Configs written before the checkbox existed always carried the key, so a stored
+         key with no flag means the user had opted into keeping it. */
+      if (saved.saveKey === undefined) saved.saveKey = !!saved.apiKey;
+      if (!saved.saveKey) saved.apiKey = '';
+      config = Object.assign(config, saved);
+    }
+  } catch(_){}
+  paintApiState();
+  try {
+    const raw = await store.get(K_PROJECT);
+    if (raw){
+      const p = JSON.parse(raw);
+      state.nodes = p.nodes || [];
+      state.imageSeq = p.imageSeq || 0;
+      state.textSeq = p.textSeq || 0;
+    }
+  } catch(_){}
+}
+
+window.addEventListener('beforeunload', e => {
+  if (state.dirty){ e.preventDefault(); e.returnValue = ''; }
+});
+
+/* ══════════════════════════════════════════════════════════
+   11. Splitter (drag the bar between the tree and the editor)
+   ══════════════════════════════════════════════════════════ */
+const SIDE_MIN = 220;   // tree side never gets narrower than this
+const MAIN_MIN = 420;   // editor never gets narrower than this
+const SIDE_DEFAULT = 316;
+const K_SIDEW = 'manualgen:sidew';
+
+const splitter = $('#splitter'), sideEl = document.querySelector('.side'),
+      mainEl   = document.querySelector('.main'), bodyEl = document.querySelector('.body');
+
+/* Clamp so neither pane goes under its minimum, and apply. */
+function setSideWidth(px, maxW){
+  const max = maxW != null ? maxW : sideMax();
+  const w   = Math.round(Math.min(Math.max(px, SIDE_MIN), max));
+  document.documentElement.style.setProperty('--side-w', w + 'px');
+  return w;
+}
+
+/* Widest the side may get before the editor hits MAIN_MIN.
+   gaps = the two flex gaps + the splitter, i.e. whatever isn't one of the panes. */
+function sideMax(){
+  const total = bodyEl.clientWidth;
+  const gaps  = total - sideEl.offsetWidth - mainEl.offsetWidth;
+  return Math.max(SIDE_MIN, total - gaps - MAIN_MIN);
+}
+
+/* Drag state is measured once on pointerdown: reading offsetWidth on every
+   pointermove forces a sync layout and makes the bar lag behind the cursor. */
+let dragging = false, dragStartX = 0, dragStartW = 0, dragMax = 0, dragX = 0, dragRaf = 0;
+
+splitter.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  dragging   = true;
+  dragStartX = dragX = e.clientX;   // seed dragX so a click with no move keeps the width
+  dragStartW = sideEl.offsetWidth;
+  dragMax    = sideMax();
+  splitter.setPointerCapture(e.pointerId);
+  splitter.classList.add('dragging');
+  document.body.classList.add('col-resizing');
+  e.preventDefault();
+});
+
+splitter.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  dragX = e.clientX;
+  if (dragRaf) return;                                  // coalesce to one paint per frame
+  dragRaf = requestAnimationFrame(() => {
+    dragRaf = 0;
+    setSideWidth(dragStartW + (dragX - dragStartX), dragMax);   // 1:1 with the pointer
+  });
+});
+
+function endDrag(e){
+  if (!dragging) return;
+  dragging = false;
+  if (dragRaf){ cancelAnimationFrame(dragRaf); dragRaf = 0; }
+  setSideWidth(dragStartW + (dragX - dragStartX), dragMax);     // land on the last position
+  try { splitter.releasePointerCapture(e.pointerId); } catch(_){}
+  splitter.classList.remove('dragging');
+  document.body.classList.remove('col-resizing');
+  store.set(K_SIDEW, String(sideEl.offsetWidth));
+}
+splitter.addEventListener('pointerup', endDrag);
+splitter.addEventListener('pointercancel', endDrag);
+
+/* Double-click resets, arrow keys nudge (the bar is focusable). */
+splitter.addEventListener('dblclick', () => {
+  store.set(K_SIDEW, String(setSideWidth(SIDE_DEFAULT)));
+});
+splitter.addEventListener('keydown', e => {
+  const step = e.shiftKey ? 40 : 12;
+  if (e.key === 'ArrowLeft')       store.set(K_SIDEW, String(setSideWidth(sideEl.offsetWidth - step)));
+  else if (e.key === 'ArrowRight') store.set(K_SIDEW, String(setSideWidth(sideEl.offsetWidth + step)));
+  else return;
+  e.preventDefault();
+});
+
+/* Keep the panes legal when the window shrinks. */
+window.addEventListener('resize', () => { if (window.innerWidth > 760) setSideWidth(sideEl.offsetWidth); });
+
+async function restoreSideWidth(){
+  try {
+    const raw = await store.get(K_SIDEW);
+    if (raw) setSideWidth(parseInt(raw, 10) || SIDE_DEFAULT);
+  } catch(_){}
+}
+
+/* ══════════════════════════════════════════════════════════
+   12. Startup
+   ══════════════════════════════════════════════════════════ */
+(async function init(){
+  await restore();
+  resetTreeUndo();          // the restored document is the baseline, not an empty tree
+  await restoreSideWidth();
+  loadLexical();
+  tree.render();
+  renderEditor();
+  if (!LEX_OK) toast('Could not load the editor bundle (vendor/lexical.bundle.js).', true);
+})();
+</script>
+</body>
+</html>
