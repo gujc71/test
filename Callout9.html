@@ -475,10 +475,6 @@ body.col-resizing *{user-select:none!important}
         <label for="fModel">Model</label>
         <input id="fModel" placeholder="claude-sonnet-4-6" spellcheck="false">
       </div>
-      <div class="field" id="wrapImgModel">
-        <label for="fImgModel">Image model · used when labeling an image</label>
-        <input id="fImgModel" placeholder="gemini-2.5-flash-image" spellcheck="false">
-      </div>
       <div class="field" id="wrapKey">
         <label for="fKey">API key</label>
         <input id="fKey" type="password" placeholder="sk-…" spellcheck="false" autocomplete="off">
@@ -552,7 +548,7 @@ const state = {
 };
 /* `apiKey` is the one field that may stay out of storage. With saveKey off it lives only in
    this object, so closing the page takes it with it — the safer default. */
-let config = { provider:'gemini', model:'gemini-3.6-flash', imageModel:'', apiKey:'', baseUrl:'',
+let config = { provider:'gemini', model:'gemini-3.6-flash', apiKey:'', baseUrl:'',
                saveKey:false, system: DEFAULT_SYSTEM };
 
 /* What actually gets written to storage: everything except the key, unless asked. */
@@ -1189,8 +1185,21 @@ function renderImageView(node){
   wrap.appendChild(busy);              // re-append so it stays above the editor
 
   currentEditor = {
-    node, busy, fab: ed.aiButton,
+    node, busy, fab: ed.aiButton, ready: ed.ready,
     setAIEnabled: ed.setAIEnabled,
+    /* AI callouts land as the editor's own text objects rather than as pixels: they
+       can be dragged onto the exact spot, retyped, restyled or deleted, and only the
+       save draws them into the picture. */
+    async addCallouts(points){
+      await ed.ready;
+      const { w, h } = ed.size();
+      const size = clamp(Math.round(Math.min(w, h) * 0.035), 14, 56);
+      return ed.addTexts(points.map(p => ({
+        text: p.n, x: p.x * w, y: p.y * h, center: true,
+        size, bold: true, italic: false, underline: false,
+        color: CALLOUT_RED, bg: false, bgColor: CALLOUT_RED
+      })));
+    },
     save(silent){
       const changed = ed.isDirty();
       if (changed){
@@ -2703,16 +2712,21 @@ function mountLexical(shell, node, markDirty, onSplit){
    ══════════════════════════════════════════════════════════ */
 /* The dialog runs in two modes:
    'text'  - the AI writes the manual body, saved as a Text node (the ✦ button)
-   'image' - the AI re-draws the same picture with red number labels taken from the
-             description just written, saved as an Image node. */
+   'image' - the AI is asked where each number from the description belongs, and those
+             numbers are placed on a copy of the picture as the image editor's own
+             texts, so they can still be moved. The model returns coordinates, never
+             a picture. */
 const LABEL_PROMPT =
-  'Recreate the image by marking the locations indicated by each number in the attached description with red number labels.';
+  'Find, for every number used in the attached description, the element on the image it refers to, ' +
+  'and answer with the position where that number should be stamped.';
 const ASK_UI = {
   text : { h:'Generate with AI', busy:'AI is writing the content…',
            hint:'The image and the note are sent together, and the result is saved as a <b>Text</b> node under this one.' },
-  image: { h:'Label the image with AI', busy:'AI is drawing the image…',
-           hint:'The image, the note and the description just generated are sent together, and the image that comes back ' +
-                'is saved as an <b>Image</b> node under this one. The model must be able to return images.' }
+  image: { h:'Label the image with AI', busy:'AI is locating the numbers…',
+           hint:'The image, the note and the description just generated are sent together; the AI answers with the ' +
+                'x/y position of each number and they are placed on a copy of the image as <b>editable text</b> — ' +
+                'drag one onto the right spot, retype or delete it, then save to draw them in. ' +
+                'Any model that can read an image will do.' }
 };
 /* Kept per mode so an edited note / model survives closing and reopening the dialog.
    The notes also go to storage, so the last one sent comes back on the next run. */
@@ -2720,38 +2734,31 @@ const askMemos  = { text: $('#askMemo').value, image: LABEL_PROMPT };
 const askModels = { text: '', image: '' };
 const saveMemos = () => store.set(K_MEMOS, JSON.stringify(askMemos));
 
-/* Models offered in the dialog. `image` marks the ones that can draw a picture rather
-   than only read one - the labeling step is unusable without such a model. Whatever is
+/* Models offered in the dialog. Both modes only ever read the picture - labeling asks
+   for coordinates, not for a drawing - so the same list serves either one. Whatever is
    registered under “Register AI API” is added to the list too, so a model typed there
    by hand can still be picked here. */
 const MODEL_CATALOG = {
-  gemini:    [{ id:'gemini-3.6-flash' }, { id:'gemini-3.6-pro' }, { id:'gemini-2.5-flash-image', image:true }],
-  openai:    [{ id:'gpt-4o' }, { id:'gpt-4o-mini' }, { id:'gpt-image-1', image:true }],
+  gemini:    [{ id:'gemini-3.6-flash' }, { id:'gemini-3.6-pro' }],
+  openai:    [{ id:'gpt-4o' }, { id:'gpt-4o-mini' }],
   anthropic: [{ id:'claude-sonnet-4-6' }]
 };
-const DRAWS = /image|dall-e/i;
-function modelChoices(mode){
-  const cat = MODEL_CATALOG[config.provider] || [];
-  const ids = cat.map(m => m.id);
-  for (const extra of [config.model, config.imageModel])
-    if (extra && !ids.includes(extra)) ids.push(extra);
-  if (mode !== 'image') return ids;
-  const draws = ids.filter(id => cat.find(m => m.id === id)?.image || DRAWS.test(id));
-  return draws.length ? draws : ids;      // nothing suitable: show all, the call reports why
+function modelChoices(){
+  const ids = (MODEL_CATALOG[config.provider] || []).map(m => m.id);
+  if (config.model && !ids.includes(config.model)) ids.push(config.model);
+  return ids;
 }
 function paintAskModels(mode){
   const sel = $('#askModel');
-  const ids = modelChoices(mode);
+  const ids = modelChoices();
   sel.innerHTML = '';
   for (const id of ids){
     const o = document.createElement('option');
     o.value = id; o.textContent = id;
     sel.appendChild(o);
   }
-  /* last pick if it is still on offer, otherwise the registered default for this mode */
-  const want = [askModels[mode],
-                mode === 'image' ? (config.imageModel || DEF_IMAGE_MODEL[config.provider]) : config.model]
-               .find(v => v && ids.includes(v));
+  /* last pick if it is still on offer, otherwise the registered default */
+  const want = [askModels[mode], config.model].find(v => v && ids.includes(v));
   sel.value = want || ids[0] || '';
   sel.disabled = !ids.length;
 }
@@ -2778,8 +2785,8 @@ function openAsk(node){
   if (currentEditor && currentEditor.node === node && state.dirty) currentEditor.save(true);
   showAsk(node, 'text');
 }
-/* Offered right after a description is generated: re-draw the same image with the
-   numbers from that description marked on it. */
+/* Offered right after a description is generated: stamp the numbers from that
+   description onto a copy of the same image. */
 function openLabelAsk(node, markdown){
   if (!aiReady()){ toast(AI_NOT_REGISTERED, true); openApi(); return; }
   showAsk(node, 'image', markdown);
@@ -2816,16 +2823,23 @@ async function runAsk(){
   let labelFrom = null;
   try {
     if (mode === 'image'){
-      const { dataUrl, mime } = await callAIImage(node, memo, desc, model);
+      /* The AI only says where the numbers go. The copy starts as the picture itself
+         and the callouts are handed to the image editor as texts, still floating, so
+         the placement can be corrected before the save draws them in. */
+      const points = await callAIPoints(node, memo, desc, model);
       const child = {
         id: uid(), type:'image', name:'Image' + (++state.imageSeq),
-        image: dataUrl, mime, memo, children: []
+        image: node.image, mime: node.mime || 'image/png', memo, points, children: []
       };
       (node.children ||= []).push(child);
       node.collapsed = false;
       save();
       state.selectedId = child.id; tree.render(); renderEditor();
-      toast(`Created node ${child.name}.`);
+      const n = points.length, many = n === 1 ? '' : 's';
+      if (await placeCallouts(child, points))
+        toast(`Created node ${child.name} — ${n} callout${many} placed; drag them and save.`);
+      else
+        toast(`Created node ${child.name} — ${n} callout${many} drawn.`);
     } else {
       const markdown = await callAI(node, memo, model);
       const html = mdToHtml(markdown);
@@ -2865,10 +2879,12 @@ function stripFence(t){
 }
 
 /* `pick` is the model chosen in the dialog; without one the registered default is used
-   (the connection test calls this with no pick). */
-async function callAI(node, memo, pick){
+   (the connection test calls this with no pick). `sysOverride` replaces the registered
+   system prompt - the callout step asks for JSON, which the manual-writing instruction
+   would otherwise talk the model out of. */
+async function callAI(node, memo, pick, sysOverride){
   const { mime, b64 } = splitDataURL(node.image);
-  const sys = config.system || DEFAULT_SYSTEM;
+  const sys = sysOverride || config.system || DEFAULT_SYSTEM;
   const p = config.provider;
 
   if (p === 'anthropic'){
@@ -2931,120 +2947,114 @@ async function callAI(node, memo, pick){
   return stripFence(data.choices?.[0]?.message?.content || '');
 }
 
-/* ── Image answers ──────────────────────────────────
-   Providers hand an image back in a different shape each (Anthropic image blocks,
-   Gemini inline_data, OpenAI b64_json, OpenAI-compatible servers a data: URL inside
-   the message). Rather than one branch per shape, the whole JSON is scanned for the
-   first base64 image that is not the picture we sent. */
-const IMAGE_SYSTEM =
-  'You edit images. Return the edited image itself as your answer; do not reply with text only.';
-const B64_RE = /^[A-Za-z0-9+/=\s]+$/;
+/* ── Number callouts ────────────────────────────────
+   The AI is never asked to draw. It reads the picture and the description and answers
+   with a coordinate per number; the marker itself is painted here, on a canvas, so the
+   screenshot underneath stays untouched and every callout looks the same. */
+const POINTS_SYSTEM =
+  'You locate elements inside a screenshot. You answer with JSON and nothing else - ' +
+  'no explanation, no code fence.';
+/* Coordinates come back on a 0-1000 grid: that is the space Gemini is trained to speak,
+   and it keeps the answer independent of how large the picture actually is. */
+const POINTS_FORMAT =
+  '\n\n--- Answer format ---\n' +
+  'Answer with a JSON array holding one entry per number used in the description:\n' +
+  '[{"n":1,"x":120,"y":640,"label":"the search box"}]\n' +
+  '"n" is the number as written in the description, "x" and "y" are the centre of the ' +
+  'element it points at on a 0-1000 grid laid over the whole image - x from the left ' +
+  'edge, y from the top edge, both integers - and "label" names the element in a few ' +
+  'words. Use every number once, in ascending order, and output the JSON array alone.';
 
-function imageFromText(t){
-  const m = /data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/i.exec(t || '');
-  if (!m) return null;
-  return { dataUrl: m[0], mime: /^data:([^;]+)/.exec(m[0])[1] };
+/* Tolerates a stray sentence around the array and both coordinate conventions: a model
+   that answers in 0-1 fractions instead of the 0-1000 grid it was asked for is still
+   understood, because no real answer keeps every single coordinate at or below 1. */
+function parsePoints(text){
+  const raw = stripFence(text || '');
+  const m = /\[[\s\S]*\]/.exec(raw);
+  if (!m) throw new Error('The answer held no JSON array of coordinates.');
+  let arr;
+  try { arr = JSON.parse(m[0]); }
+  catch(_){ throw new Error('The coordinates came back as broken JSON.'); }
+  if (!Array.isArray(arr)) throw new Error('The answer was not a JSON array.');
+
+  const rows = arr
+    .map(o => (o && typeof o === 'object') ? o : null)
+    .filter(Boolean)
+    .map(o => ({ n: o.n ?? o.number ?? o.id, x: Number(o.x), y: Number(o.y), label: o.label || o.name || '' }))
+    .filter(o => Number.isFinite(o.x) && Number.isFinite(o.y));
+  if (!rows.length) throw new Error('No usable coordinate came back.');
+
+  const span = Math.max(...rows.map(o => Math.max(Math.abs(o.x), Math.abs(o.y))));
+  const scale = span <= 1 ? 1 : 1000;
+  return rows.map((o, i) => ({
+    n: String(o.n ?? (i + 1)).trim() || String(i + 1),
+    x: clamp01(o.x / scale),
+    y: clamp01(o.y / scale),
+    label: String(o.label).slice(0, 120)
+  }));
 }
-function findImage(v, skipB64, depth = 0){
-  if (v == null || depth > 8) return null;
-  if (typeof v === 'string') return imageFromText(v);
-  if (Array.isArray(v)){
-    for (const x of v){ const r = findImage(x, skipB64, depth + 1); if (r) return r; }
-    return null;
+const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+
+/* Sends the image, the note and the description, and returns the callout positions. */
+async function callAIPoints(node, memo, desc, pick){
+  const prompt = (desc ? `${memo}\n\n--- Description ---\n${desc}` : memo) + POINTS_FORMAT;
+  const answer = await callAI(node, prompt, pick, POINTS_SYSTEM);
+  return parsePoints(answer);
+}
+
+/* Hands the callouts to the image editor showing `node`, where they stay editable.
+   Answers false when there is no editor to take them - the script failed to load and
+   the node is on screen as a plain picture - and the numbers are then drawn in
+   instead, which at least keeps the labels. */
+async function placeCallouts(node, points){
+  const ed = currentEditor;
+  if (!ed || ed.node !== node || !ed.addCallouts) {
+    const { dataUrl, mime } = await drawCallouts(node.image, points);
+    node.image = dataUrl; node.mime = mime;
+    save(); renderEditor();
+    return false;
   }
-  if (typeof v !== 'object') return null;
-
-  const raw = v.b64_json || v.base64 || (typeof v.data === 'string' ? v.data : null);
-  if (raw && raw.length > 512 && B64_RE.test(raw)){
-    const b64 = raw.replace(/\s+/g, '');
-    if (b64 !== skipB64){                       // ignore the image we sent, echoed back
-      const t = v.mime_type || v.mimeType || v.media_type || v.mediaType || v.type;
-      const mime = (typeof t === 'string' && t.startsWith('image/')) ? t : 'image/png';
-      return { dataUrl: `data:${mime};base64,${b64}`, mime };
-    }
-  }
-  for (const k of Object.keys(v)){ const r = findImage(v[k], skipB64, depth + 1); if (r) return r; }
-  return null;
-}
-function dataUrlToBlob(dataUrl){
-  const { mime, b64 } = splitDataURL(dataUrl);
-  const bin = atob(b64);
-  const buf = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-  return new Blob([buf], { type: mime });
+  await ed.addCallouts(points);
+  return true;
 }
 
-/* Sends the image plus the note and the description, and returns the picture that
-   comes back. Throws when the answer holds no image. */
-async function callAIImage(node, memo, desc, pick){
-  const p = config.provider;
-  if (!IMAGE_CAPABLE(p))
-    throw new Error('Anthropic cannot return images. Register Gemini or OpenAI under “Register AI API” and pick an image model.');
+/* Paints the numbers into the picture itself - the fallback for when the editor that
+   would otherwise hold them as texts is not there. Marker size follows the image so a
+   callout stays readable on a phone capture and does not swallow a full-page one. */
+const CALLOUT_RED = '#e02c25';
+function drawCallouts(dataUrl, points){
+  return new Promise((resolve, reject) => {
+    const im = new Image();
+    im.onload = () => {
+      const w = im.naturalWidth, h = im.naturalHeight;
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      const g = cv.getContext('2d');
+      g.drawImage(im, 0, 0);
 
-  const { mime, b64 } = splitDataURL(node.image);
-  const prompt = desc ? `${memo}\n\n--- Description ---\n${desc}` : memo;
-  logPrompt('image', p, pick || config.imageModel || config.model, IMAGE_SYSTEM, prompt);
-  /* The labeling step uses its own model - the one that writes the manual usually reads
-     images but cannot draw them. */
-  const model = pick || config.imageModel || DEF_IMAGE_MODEL[p] || config.model || '';
-  let data, text = '';
+      /* `r` is the marker's half-height: it sizes the number and doubles as the
+         margin that keeps a callout off the edges. */
+      const r = Math.max(6, Math.min(clamp(Math.round(Math.min(w, h) * 0.030), 12, 46),
+                                     Math.floor(Math.min(w, h) / 2) - 2));
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.font = `bold ${Math.max(8, Math.round(r * 1.15))}px "Segoe UI Semibold","Malgun Gothic",Arial,sans-serif`;
+      g.fillStyle = CALLOUT_RED;
 
-  if (p === 'gemini'){
-    const url = geminiURL(model);
-    const body = {
-      contents:[{ role:'user', parts:[ { inline_data:{ mime_type: mime, data: b64 } }, { text: prompt } ] }],
-      generationConfig: { responseModalities:['TEXT','IMAGE'] }
+      for (const p of points){
+        /* Kept a marker's width away from the edges, so a callout on a corner
+           element is not clipped. */
+        const cx = clamp(p.x * w, r + 2, w - r - 2);
+        const cy = clamp(p.y * h, r + 2, h - r - 2);
+        g.fillText(p.n, cx, cy);
+      }
+      resolve({ dataUrl: cv.toDataURL('image/png'), mime:'image/png' });
     };
-    const res = await fetch(url, {
-      method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body)
-    });
-    data = await parseRes(res);
-    text = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('\n');
-
-  } else {
-    const base = apiBase(p);
-    if (!base) throw new Error('Base URL is empty.');
-    if (/gpt-image|dall-e/i.test(model)){
-      /* A dedicated image model takes the picture as multipart form data, not JSON */
-      const fd = new FormData();
-      fd.append('model', model);
-      fd.append('prompt', prompt);
-      fd.append('image', dataUrlToBlob(node.image), 'image.png');
-      const res = await fetch(base + '/images/edits', {
-        method:'POST', headers:{ 'Authorization':'Bearer ' + config.apiKey }, body: fd
-      });
-      data = await parseRes(res);
-    } else {
-      const res = await fetch(base + '/chat/completions', {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + config.apiKey },
-        body: JSON.stringify({
-          model: model || 'gpt-4o-mini',
-          max_tokens: 4096,
-          messages:[
-            { role:'system', content: IMAGE_SYSTEM },
-            { role:'user', content:[
-              { type:'image_url', image_url:{ url: node.image } },
-              { type:'text', text: prompt }
-            ]}
-          ]
-        })
-      });
-      data = await parseRes(res);
-      const c = data.choices?.[0]?.message?.content;
-      text = typeof c === 'string' ? c : '';
-    }
-  }
-
-  const img = findImage(data, b64);
-  if (!img){
-    const reply = text.trim().replace(/\s+/g, ' ').slice(0, 140);
-    throw new Error(`“${model}” answered without an image — pick a model that can draw ` +
-      `(e.g. gemini-2.5-flash-image, gpt-image-1) in the AI model box.` +
-      (reply ? ` Its reply: ${reply}` : ''));
-  }
-  return img;
+    im.onerror = () => reject(new Error('Could not read the image to draw on.'));
+    im.src = dataUrl;
+  });
 }
+const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
 
 async function parseRes(res){
   const text = await res.text();
@@ -3062,8 +3072,8 @@ async function parseRes(res){
    8. API settings screen
    ══════════════════════════════════════════════════════════ */
 const HINTS = {
-  gemini:'Example models: gemini-3.6-flash, gemini-3.6-pro · a plain text model cannot draw, so labeling needs an image model such as gemini-2.5-flash-image.',
-  openai:'Example models: gpt-4o, gpt-4o-mini · the model must accept image input. Image model: gpt-image-1.',
+  gemini:'Example models: gemini-3.6-flash, gemini-3.6-pro · the model has to accept image input; callouts are drawn in the page, so it never has to return one.',
+  openai:'Example models: gpt-4o, gpt-4o-mini · the model must accept image input.',
   anthropic:'Example model: claude-sonnet-4-6 · calls go straight from the browser, so be careful where the key could be exposed.'
 };
 /* Picking a provider drops its stock endpoint into the Base URL box; edit it there to
@@ -3085,30 +3095,22 @@ function geminiURL(model){
     : raw.replace(/\/+$/,'') + seg;
   return url + (url.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(config.apiKey);
 }
+/* One model does both jobs now: writing the manual and pointing at the numbers are both
+   read-the-image tasks, and the callouts themselves are drawn in the page. */
 const DEF_MODEL = { gemini:'gemini-3.6-flash', openai:'gpt-4o', anthropic:'claude-sonnet-4-6' };
-/* Writing the manual and re-drawing the image are different jobs: a model that reads an
-   image is not necessarily able to return one, so the labeling step gets its own model.
-   Anthropic returns no image at all, hence its empty entry. */
-const DEF_IMAGE_MODEL = { gemini:'gemini-2.5-flash-image', openai:'gpt-image-1', anthropic:'' };
-const IMAGE_CAPABLE = p => p === 'gemini' || p === 'openai';
 
 function syncApiForm(){
-  const p = $('#fProvider').value;
-  $('#wrapImgModel').hidden = !IMAGE_CAPABLE(p);
-  $('#apiHint').textContent = HINTS[p];
+  $('#apiHint').textContent = HINTS[$('#fProvider').value];
 }
 $('#fProvider').addEventListener('change', () => {
   const p = $('#fProvider').value;
   if (!$('#fModel').value || Object.values(DEF_MODEL).includes($('#fModel').value)) $('#fModel').value = DEF_MODEL[p];
-  const im = $('#fImgModel');
-  if (!im.value || Object.values(DEF_IMAGE_MODEL).includes(im.value)) im.value = DEF_IMAGE_MODEL[p];
   $('#fBase').value = DEF_BASE[p];    // every provider answers at a different endpoint
   syncApiForm();
 });
 function openApi(){
   $('#fProvider').value = config.provider;
   $('#fModel').value = config.model || DEF_MODEL[config.provider];
-  $('#fImgModel').value = config.imageModel || DEF_IMAGE_MODEL[config.provider];
   $('#fKey').value = config.apiKey || '';
   $('#fSaveKey').checked = !!config.saveKey;
   $('#fBase').value = config.baseUrl || DEF_BASE[config.provider] || '';
@@ -3122,7 +3124,6 @@ function readApiForm(){
   return {
     provider: $('#fProvider').value,
     model: $('#fModel').value.trim() || DEF_MODEL[$('#fProvider').value],
-    imageModel: $('#fImgModel').value.trim(),
     apiKey: $('#fKey').value.trim(),
     saveKey: $('#fSaveKey').checked,
     baseUrl: $('#fBase').value.trim() || DEF_BASE[$('#fProvider').value],
@@ -3617,6 +3618,7 @@ async function restore(){
       if (saved.provider === 'builtin'){ saved.provider = 'anthropic'; saved.baseUrl = ''; }
       else if (saved.provider === 'compatible') saved.provider = 'openai';
       if (!DEF_BASE[saved.provider]) saved.provider = 'gemini';
+      delete saved.imageModel;      // callouts are drawn here now, so no drawing model
       config = Object.assign(config, saved);
     }
   } catch(_){}
@@ -3626,8 +3628,14 @@ async function restore(){
     const raw = await store.get(K_MEMOS);
     if (raw){
       const saved = JSON.parse(raw);
-      for (const k of Object.keys(askMemos))
-        if (typeof saved[k] === 'string' && saved[k].trim()) askMemos[k] = saved[k];
+      for (const k of Object.keys(askMemos)){
+        const v = saved[k];
+        if (typeof v !== 'string' || !v.trim()) continue;
+        /* A note asking for a redrawn picture was written for the old labeling step and
+           would talk the model out of answering with coordinates. */
+        if (k === 'image' && /recreate the image|re-?draw/i.test(v)) continue;
+        askMemos[k] = v;
+      }
     }
   } catch(_){}
   try {

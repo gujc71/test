@@ -1,0 +1,2221 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
+<title>Apache James Wrapper Log Viewer</title>
+<style>
+/* ---------- tokens (light) ---------- */
+:root{
+  color-scheme: light;
+  --surface-1:#fcfcfb; --plane:#f9f9f7; --raised:#ffffff;
+  --ink-1:#0b0b0b; --ink-2:#52514e; --ink-3:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
+  --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a; --series-4:#eda100;
+  --series-5:#e87ba4; --series-6:#008300; --series-7:#4a3aa7; --series-8:#e34948;
+  --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+  --accent:#2a78d6; --wash:rgba(42,120,214,.10); --hover:rgba(11,11,11,.04);
+  --mono: ui-monospace, "Cascadia Mono", "Consolas", "D2Coding", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --surface-1:#1a1a19; --plane:#0d0d0d; --raised:#232322;
+  --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
+  --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+  --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --series-4:#c98500;
+  --series-5:#d55181; --series-6:#008300; --series-7:#9085e9; --series-8:#e66767;
+  --accent:#3987e5; --wash:rgba(57,135,229,.16); --hover:rgba(255,255,255,.05);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--plane);color:var(--ink-1);font:13px/1.5 var(--sans);
+     display:flex;flex-direction:column;overflow:hidden}
+
+/* ---------- header ---------- */
+header{display:flex;align-items:center;gap:14px;padding:9px 14px;background:var(--surface-1);
+       border-bottom:1px solid var(--border);flex:none}
+header h1{font-size:14px;font-weight:650;margin:0;letter-spacing:-.01em;white-space:nowrap}
+#fileinfo{color:var(--ink-2);font-size:12px;font-variant-numeric:tabular-nums;
+          overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+header .sp{flex:1}
+button,select,input[type=text]{font:inherit;color:var(--ink-1);background:var(--raised);
+  border:1px solid var(--border);border-radius:6px;padding:4px 9px}
+button{cursor:pointer}
+button:hover{background:var(--hover)}
+button:disabled{opacity:.45;cursor:default}
+button:disabled:hover{background:var(--raised)}
+button.pri{background:var(--accent);color:#fff;border-color:transparent;font-weight:600}
+button.pri:hover{filter:brightness(1.08)}
+
+/* ---------- file tabs (열린 로그 파일) ---------- */
+#ftabs{display:flex;align-items:flex-end;gap:2px;padding:5px 8px 0;background:var(--plane);
+       border-bottom:1px solid var(--border);flex:none;overflow-x:auto;overflow-y:hidden}
+#ftabs::-webkit-scrollbar{height:6px}
+#ftabs::-webkit-scrollbar-thumb{background:var(--axis);border-radius:3px}
+#ftabs .ftab{display:inline-flex;align-items:center;gap:8px;max-width:260px;flex:none;
+  padding:6px 6px 6px 12px;border:1px solid transparent;border-radius:8px 8px 0 0;
+  background:none;color:var(--ink-2);font-size:12.5px;line-height:1.4;white-space:nowrap}
+#ftabs .ftab:hover{background:var(--hover)}
+#ftabs .ftab.on{background:var(--surface-1);border-color:var(--border);
+                color:var(--ink-1);font-weight:600}
+#ftabs .ftab .nm{overflow:hidden;text-overflow:ellipsis;min-width:0}
+#ftabs .ftab .sub{color:var(--ink-3);font-weight:400;font-size:11px;flex:none;
+                  font-variant-numeric:tabular-nums}
+#ftabs .ftab .x{flex:none;width:17px;height:17px;line-height:16px;text-align:center;
+                border-radius:4px;color:var(--ink-3);font-size:11px}
+#ftabs .ftab .x:hover{background:var(--axis);color:var(--ink-1)}
+#ftabs .fadd{flex:none;border:none;background:none;color:var(--ink-3);
+             padding:4px 10px;margin-bottom:3px;border-radius:6px;font-size:14px}
+#ftabs .fadd:hover{background:var(--hover);color:var(--ink-1)}
+
+/* ---------- tabs ---------- */
+nav{display:flex;gap:2px;padding:0 12px;background:var(--surface-1);
+    border-bottom:1px solid var(--border);flex:none}
+nav button{background:none;border:none;border-radius:0;border-bottom:2px solid transparent;
+  padding:8px 13px;color:var(--ink-2);font-weight:550}
+nav button.on{color:var(--ink-1);border-bottom-color:var(--accent)}
+nav button:hover{background:var(--hover)}
+nav .cnt{color:var(--ink-3);font-variant-numeric:tabular-nums;font-weight:400;margin-left:5px}
+nav .sp{flex:1}
+#reloadmsg{align-self:center;font-size:12px;color:var(--ink-2);margin-right:8px;min-width:0;
+           overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#reloadmsg.err{color:var(--critical)}
+nav button#btnreload{flex:none;align-self:center;margin:0 0 3px;padding:3px 10px;font-size:12px;
+  border:1px solid var(--border);border-radius:6px;background:var(--raised);color:var(--ink-2)}
+nav button#btnreload:hover{background:var(--hover);color:var(--ink-1)}
+nav button#btnreload:disabled{opacity:.45;cursor:default;background:var(--raised);color:var(--ink-2)}
+
+/* ---------- drop zone ---------- */
+#drop{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:40px}
+#drop.hot{background:var(--wash)}
+#dropbox{border:2px dashed var(--axis);border-radius:14px;padding:44px 60px;text-align:center;
+  background:var(--surface-1);max-width:620px}
+#dropbox h2{margin:0 0 6px;font-size:17px}
+#dropbox p{margin:4px 0;color:var(--ink-2)}
+#dropbox ul{text-align:left;color:var(--ink-2);margin:14px 0 0;padding-left:20px;font-size:12px;line-height:1.9}
+#prog{width:min(560px,80vw);height:6px;background:var(--grid);border-radius:3px;overflow:hidden;display:none}
+#prog i{display:block;height:100%;width:0;background:var(--accent);transition:width .12s linear}
+#progtxt{color:var(--ink-2);font-size:12px;font-variant-numeric:tabular-nums;min-height:18px}
+
+/* ---------- views ---------- */
+main{flex:1;min-height:0;display:none}
+main.on{display:flex;flex-direction:column}
+
+/* filter bar */
+.fbar{display:flex;align-items:center;gap:7px;padding:8px 12px;background:var(--surface-1);
+      border-bottom:1px solid var(--border);flex:none;flex-wrap:wrap}
+.chip{border:1px solid var(--border);background:var(--raised);border-radius:999px;padding:3px 11px;
+      font-size:12px;color:var(--ink-2);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.chip:hover{background:var(--hover)}
+.chip.on{background:var(--wash);border-color:var(--accent);color:var(--ink-1);font-weight:600}
+.chip .dot{width:8px;height:8px;border-radius:50%;flex:none}
+.chip b{font-variant-numeric:tabular-nums;font-weight:500;color:var(--ink-3)}
+.fbar input[type=text]{flex:1;min-width:180px}
+.fbar .hint{color:var(--ink-3);font-size:12px;font-variant-numeric:tabular-nums}
+
+/* split */
+.split{flex:1;min-height:0;display:flex}
+#list{width:46%;min-width:260px;overflow:auto;position:relative;
+      background:var(--plane)}
+#vsplit{flex:none;width:7px;cursor:col-resize;position:relative;background:var(--border);
+        background-clip:content-box;border-left:3px solid var(--plane);border-right:3px solid var(--surface-1)}
+#vsplit:hover,#vsplit.drag{background:var(--accent);border-left-width:2px;border-right-width:2px}
+body.vsplitting{cursor:col-resize;user-select:none}
+#listInner{position:relative}
+.row{position:absolute;left:0;right:0;height:78px;padding:8px 12px;border-bottom:1px solid var(--border);
+     cursor:pointer;overflow:hidden;background:var(--surface-1)}
+.row:hover{background:var(--hover)}
+.row.sel{background:var(--wash);box-shadow:inset 3px 0 0 var(--accent)}
+.row .l1{display:flex;align-items:center;gap:7px;white-space:nowrap}
+.row .tag{font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;color:#fff;flex:none}
+.row .t{color:var(--ink-3);font-variant-numeric:tabular-nums;font-size:11.5px;flex:none;font-family:var(--mono)}
+.row .ttl{font-weight:600;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.row .l2,.row .l3{color:var(--ink-2);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .l3{color:var(--ink-3);font-size:11.5px}
+.badge{font-size:11px;padding:0 5px;border-radius:4px;font-weight:650;flex:none}
+.b-ok{background:rgba(12,163,12,.14);color:var(--good)}
+.b-warn{background:rgba(250,178,25,.20);color:#8a6100}
+:root[data-theme="dark"] .b-warn{color:var(--warning)}
+.b-crit{background:rgba(208,59,59,.16);color:var(--critical)}
+.b-mute{background:var(--hover);color:var(--ink-3)}
+
+/* detail */
+#detail{flex:1;min-width:0;overflow:auto;background:var(--surface-1)}
+#detail .empty{padding:56px;text-align:center;color:var(--ink-3)}
+.dhead{padding:14px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface-1);z-index:2}
+.dhead h3{margin:0 0 8px;font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 14px;font-size:12.5px}
+.kv dt{color:var(--ink-3);white-space:nowrap}
+.kv dd{margin:0;color:var(--ink-1);word-break:break-all;font-family:var(--mono);font-size:12px}
+.dtools{display:flex;gap:7px;align-items:center;padding:7px 16px;border-bottom:1px solid var(--border);
+        position:sticky;top:0;background:var(--plane);font-size:12px;color:var(--ink-2)}
+.lines{font-family:var(--mono);font-size:11.5px;line-height:1.65}
+.ln{display:flex;gap:9px;padding:1px 16px;white-space:pre-wrap;word-break:break-all}
+.ln:hover{background:var(--hover)}
+.ln .lt{color:var(--ink-3);flex:none;user-select:none}
+.ln .ll{flex:none;width:44px;font-weight:700;font-size:10.5px;padding-top:1px}
+.ln .lg{color:var(--ink-3);flex:none;user-select:none}
+.lv-1{color:var(--ink-3)} .lv-2{color:var(--series-1)}
+.lv-3{color:var(--warning)} .lv-4{color:var(--critical)}
+.ln.noise{opacity:.5}
+.hidden{display:none!important}
+
+/* templates table */
+.tblwrap{flex:1;overflow:auto}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{position:sticky;top:0;background:var(--surface-1);text-align:left;padding:7px 10px;
+   border-bottom:1px solid var(--axis);font-weight:650;z-index:1;cursor:pointer;white-space:nowrap}
+th:hover{background:var(--hover)}
+td{padding:5px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.tpl{font-family:var(--mono);font-size:11.5px;word-break:break-all}
+tr:hover td{background:var(--hover)}
+.bar{height:5px;border-radius:2.5px;background:var(--series-1);min-width:2px}
+.lvlpill{font-size:10.5px;font-weight:700;padding:1px 5px;border-radius:4px}
+
+/* metrics */
+.mwrap{flex:1;overflow:auto;padding:14px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.tile{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:11px 13px}
+.tile .lab{color:var(--ink-3);font-size:11.5px}
+.tile .val{font-size:23px;font-weight:640;letter-spacing:-.02em;margin-top:2px}
+.tile .sub{color:var(--ink-2);font-size:11.5px;margin-top:1px}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:12px}
+.card{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:12px 14px 8px}
+.card h4{margin:0;font-size:13px;font-weight:640}
+.card .cap{color:var(--ink-3);font-size:11.5px;margin:1px 0 8px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-2);margin:6px 0 0}
+.legend i{width:11px;height:3px;border-radius:1.5px;display:inline-block;vertical-align:middle;margin-right:5px}
+.cbox{position:relative}
+canvas{display:block;width:100%}
+.tip{position:absolute;pointer-events:none;background:var(--raised);border:1px solid var(--border);
+     border-radius:7px;padding:6px 9px;font-size:11.5px;box-shadow:0 4px 14px rgba(0,0,0,.14);
+     white-space:nowrap;display:none;z-index:5;font-variant-numeric:tabular-nums}
+.tip b{display:block;color:var(--ink-3);font-weight:500;margin-bottom:3px}
+.tip .r{display:flex;gap:8px;justify-content:space-between}
+.tip .r i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:5px}
+details.tblv{margin-top:8px;font-size:12px;color:var(--ink-2)}
+details.tblv summary{cursor:pointer;color:var(--ink-3)}
+details.tblv table{font-size:11.5px;margin-top:6px}
+
+/* ---------- 그룹 정규식 ---------- */
+#qline,#gre{font-family:var(--mono);font-size:11.5px}
+#qline{flex:1.3!important} #gre{flex:1.3!important}
+.fbar input[type=text].bad{border-color:var(--critical)}
+#grehelp{width:25px;padding:0;text-align:center;flex:none;font-weight:700}
+#hmask{position:fixed;inset:0;background:rgba(0,0,0,.42);display:none;
+       align-items:center;justify-content:center;z-index:70}
+#hmask.on{display:flex}
+#hdlg{width:min(760px,92vw);max-height:86vh;background:var(--surface-1);
+      border:1px solid var(--border);border-radius:10px;box-shadow:0 18px 48px rgba(0,0,0,.30);
+      display:flex;flex-direction:column;overflow:hidden}
+#hdlg h3{margin:0;padding:11px 16px;font-size:13.5px;font-weight:650;
+         border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex:none}
+#hdlg h3 .sp{flex:1}
+#hdlg .x{border:none;background:none;font-size:15px;color:var(--ink-3);padding:0 2px}
+#hbody{padding:14px 16px 18px;overflow:auto;font-size:12.5px;line-height:1.7;color:var(--ink-2)}
+#hbody h4{margin:17px 0 7px;font-size:12.5px;color:var(--ink-1)}
+#hbody h4:first-child{margin-top:0}
+#hbody p{margin:0 0 7px}
+code{font-family:var(--mono);font-size:11.5px;background:var(--raised);
+     border:1px solid var(--border);border-radius:4px;padding:1px 4px}
+#hbody table{width:100%;border-collapse:collapse;margin:2px 0 4px}
+#hbody td{padding:5px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+#hbody td:first-child{white-space:nowrap;color:var(--ink-1)}
+#hbody tr.ex{cursor:pointer}
+#hbody tr.ex:hover{background:var(--hover)}
+#hbody tr.ex td:nth-child(n+2){font-family:var(--mono);font-size:11.5px;color:var(--accent);word-break:break-all}
+#hbody tr.exh td{color:var(--ink-3);font-size:11.5px;white-space:nowrap}
+
+/* ---------- SFTP 대화상자 ---------- */
+.hide{display:none!important}
+#ftpmask{position:fixed;inset:0;background:rgba(0,0,0,.42);display:none;
+         align-items:center;justify-content:center;z-index:60}
+#ftpmask.on{display:flex}
+#ftpdlg{width:min(860px,92vw);height:min(620px,88vh);background:var(--surface-1);
+        border:1px solid var(--border);border-radius:10px;box-shadow:0 18px 48px rgba(0,0,0,.30);
+        display:flex;flex-direction:column;overflow:hidden}
+#ftpdlg h3{margin:0;padding:11px 16px;font-size:13.5px;font-weight:650;
+           border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex:none}
+#ftpdlg h3 .sp{flex:1}
+#ftpwho{font-size:12px;font-weight:400;color:var(--ink-3);font-family:var(--mono)}
+#ftpdlg .x{border:none;background:none;font-size:15px;color:var(--ink-3);padding:0 2px}
+.ftpform{padding:16px;display:grid;grid-template-columns:74px 1fr 46px 96px;gap:9px 10px;align-items:center}
+.ftpform label{color:var(--ink-2);font-size:12px}
+.ftpform input,.ftpform select{width:100%}
+.ftpform .full{grid-column:2/5}
+.ftpform .fld{display:flex;gap:6px}
+.ftpform .fld button{white-space:nowrap}
+.ftphint{grid-column:1/5;font-size:11.5px;color:var(--ink-3);margin:2px 0 0}
+#ftpconn{flex:1;min-height:0;display:flex}
+#ftpsites{width:194px;flex:none;background:var(--plane);border-right:1px solid var(--border);
+          display:flex;flex-direction:column}
+#ftpsites .hd{padding:8px 12px;font-size:11.5px;color:var(--ink-3);
+              border-bottom:1px solid var(--border);flex:none}
+#sitelist{flex:1;overflow:auto;margin:0;padding:5px;list-style:none}
+#sitelist li{padding:6px 9px;border-radius:5px;cursor:pointer;line-height:1.35;
+             overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+#sitelist li:hover{background:var(--hover)}
+#sitelist li.sel{background:var(--wash)}
+#sitelist li b{display:block;font-size:12.5px;font-weight:600;
+               overflow:hidden;text-overflow:ellipsis}
+#sitelist li span{display:block;font-size:11px;color:var(--ink-3);font-family:var(--mono);
+                  overflow:hidden;text-overflow:ellipsis}
+#sitelist .none{padding:10px 9px;font-size:11.5px;color:var(--ink-3);white-space:normal;line-height:1.5}
+#ftpsites .btns{display:flex;gap:6px;padding:8px;border-top:1px solid var(--border);flex:none}
+#ftpsites .btns button{flex:1;padding:4px 2px;font-size:12px}
+#ftpconn .ftpform{flex:1;align-content:start;overflow:auto}
+.ftpform .ck{grid-column:2/5;display:flex;align-items:center;gap:6px;color:var(--ink-2);font-size:12px}
+.ftpform .ck input{width:auto}
+#ftpbrowse{flex:1;min-height:0;display:flex;flex-direction:column}
+.ftpbar{display:flex;align-items:center;gap:7px;padding:9px 12px;
+        border-bottom:1px solid var(--border);background:var(--raised);flex:none}
+.ftpbar input{flex:1;font-family:var(--mono);font-size:12px}
+#ftplist{flex:1;overflow:auto}
+#ftplist table{width:100%;border-collapse:collapse;font-size:12.5px}
+#ftplist td{padding:5px 10px;border-bottom:1px solid var(--border);
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#ftplist tr{cursor:pointer}
+#ftplist tr:hover{background:var(--hover)}
+#ftplist tr.sel{background:var(--wash)}
+#ftplist td.ic{width:16px;color:var(--ink-3);text-align:center}
+#ftplist td.sz,#ftplist td.dt{width:1%;text-align:right;color:var(--ink-3);
+                              font-variant-numeric:tabular-nums}
+#ftplist td.d{font-weight:600}
+#ftplist td.log{color:var(--accent)}
+#ftpfoot{display:flex;align-items:center;gap:9px;padding:10px 16px;
+         border-top:1px solid var(--border);flex:none}
+#ftpmsg{flex:1;font-size:12px;color:var(--ink-2);
+        overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#ftpmsg.err{color:var(--critical)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ApacheJames Log Viewer</h1>
+  <span id="fileinfo">파일을 열어주세요</span>
+  <input type="file" id="fileinput" accept=".log,.txt" multiple hidden>
+  <button class="pri" id="btnopen">파일 열기</button>
+  <button id="btnftp">FTP 가져오기</button>
+  <button id="btntheme" title="라이트/다크 전환">◐</button>
+</header>
+
+<div id="ftabs" class="hidden"></div>
+
+<nav id="tabs" class="hidden">
+  <button data-v="trace" class="on">트레이스<span class="cnt" id="c-trace"></span></button>
+  <button data-v="tpl">검색&집계<span class="cnt" id="c-tpl"></span></button>
+  <button data-v="err">에러·경고<span class="cnt" id="c-err"></span></button>
+  <button data-v="tl">현황</button>
+  <span class="sp"></span>
+  <span id="reloadmsg"></span>
+  <button id="btnreload" title="현재 탭의 로그를 다시 읽습니다">↻ 다시읽기</button>
+</nav>
+
+<section id="drop">
+  <div id="dropbox">
+    <h2>로그 파일을 여기에 끌어다 놓으세요</h2>
+    <p>wrapper_YYYYMMDD.log · 100MB 내외까지 처리합니다</p>
+    <ul>
+      <li>세션 ID(<code>Id='…'</code> / <code>ID=…</code>) · 메일 ID · GC 사이클로 자동 묶음</li>
+      <li><code>Successfully spooled mail</code> 줄을 다리 삼아 <b>SMTP 수신 → 스풀 → 배달</b>을 한 트레이스로 병합</li>
+      <li>hook 잡음(전체의 약 40%)은 접어서 한 줄로 요약</li>
+      <li>여러 파일을 한꺼번에 놓으면 파일마다 <b>탭</b>으로 열립니다</li>
+    </ul>
+  </div>
+  <div id="prog"><i></i></div>
+  <div id="progtxt"></div>
+</section>
+
+<!-- ===== 트레이스 ===== -->
+<main id="v-trace">
+  <div class="fbar">
+    <span id="typechips" style="display:flex;gap:6px;flex-wrap:wrap"></span>
+    <input type="text" id="q" placeholder="검색: 메일주소 / IP / 제목 / 세션ID / 폴더…   (/정규식/ 가능)">
+    <select id="sort">
+      <option value="t">시간순</option>
+      <option value="n">줄 수 많은 순</option>
+      <option value="d">소요시간 긴 순</option>
+      <option value="s">심각도순</option>
+    </select>
+    <span class="hint" id="listcnt"></span>
+  </div>
+  <div class="split">
+    <div id="list"><div id="listInner"></div></div>
+    <div id="vsplit" title="드래그해서 너비 조절 · 더블클릭하면 기본값"></div>
+    <div id="detail"><div class="empty">왼쪽에서 트레이스를 선택하세요</div></div>
+  </div>
+</main>
+
+<!-- ===== 템플릿 ===== -->
+<main id="v-tpl">
+  <div class="fbar">
+    <button id="btntpl" class="pri">템플릿 집계 실행</button>
+    <input type="text" id="qline" spellcheck="false"
+           placeholder="검색 — 셀 줄만 고릅니다. 예: no file for message name   (/정규식/ 가능)">
+    <input type="text" id="gre" spellcheck="false"
+           placeholder="그룹 정규식 — 고른 줄을 묶습니다. 예: maildir/[^/]+/([^/]+)/   (비우면 자동 정규화)">
+    <button id="grehelp" title="검색·그룹 정규식 도움말 · 예제">?</button>
+    <span class="hint" id="tplhint"></span>
+  </div>
+  <div class="tblwrap"><table id="tpltbl"></table></div>
+</main>
+
+<!-- ===== 에러·경고 ===== -->
+<main id="v-err">
+  <div class="fbar">
+    <span id="errchips" style="display:flex;gap:6px;flex-wrap:wrap"></span>
+    <input type="text" id="qerr" placeholder="검색…   (/정규식/ 가능)">
+    <span class="hint" id="errhint"></span>
+  </div>
+  <div class="tblwrap"><table id="errtbl"></table></div>
+</main>
+
+<!-- ===== 현황 ===== -->
+<main id="v-tl">
+  <div class="mwrap">
+    <div class="tiles" id="tiles"></div>
+    <div class="charts" id="charts"></div>
+  </div>
+</main>
+
+<!-- ===== SFTP 가져오기 ===== -->
+<!-- ===== 그룹 정규식 도움말 ===== -->
+<div id="hmask">
+  <div id="hdlg">
+    <h3>검색 · 그룹 정규식 도움말<span class="sp"></span>
+      <button class="x" id="hclose" title="닫기">✕</button></h3>
+    <div id="hbody">
+      <h4>두 칸이 하는 일</h4>
+      <table>
+        <tr><td><b>검색</b> (앞칸)</td><td>셀 줄을 고릅니다. 글자 그대로 찾고, <code>/</code> 로 시작하면 정규식. 비우면 모든 줄</td></tr>
+        <tr><td><b>그룹 정규식</b> (뒷칸)</td><td>고른 줄을 무엇으로 묶을지. 비우면 숫자·UUID·IP·이메일을
+            <code>{N}</code> 같은 자리표시자로 바꿔 자동으로 묶습니다</td></tr>
+      </table>
+      <p>두 칸은 <b>집계 버튼(또는 Enter)을 누를 때 함께 적용</b>됩니다 — 검색으로 줄을 고른 다음,
+         그 줄들만 그룹 정규식으로 묶어 셉니다.</p>
+      <table>
+        <tr><td>캡처그룹 <code>( )</code> 이 있으면</td><td>그 값이 그룹 키가 됩니다</td></tr>
+        <tr><td>캡처그룹이 없으면</td><td>매칭된 문자열 전체가 키가 됩니다</td></tr>
+        <tr><td>그룹이 여러 개면</td><td><code> / </code> 로 이어 붙여 하나의 키로 씁니다</td></tr>
+        <tr><td>매칭되지 않는 줄은</td><td><b>집계에서 빠집니다</b> — 필요한 줄만 골라 세는 데 쓰세요</td></tr>
+        <tr><td>대소문자를 무시하려면</td><td><code>/패턴/i</code> 처럼 슬래시로 감싸고 뒤에 <code>i</code></td></tr>
+      </table>
+      <p>검사 대상은 wrapper 접두어(<code>INFO | jvm 1 | 날짜 |</code>)와 James 헤더(레벨·스레드·로거)를 떼어낸
+         <b>메시지 본문</b>입니다. 스택트레이스 줄도 함께 검사합니다. 문법은 자바스크립트 정규식입니다.</p>
+
+      <h4>예제 — 클릭하면 두 칸에 함께 채워집니다</h4>
+      <table id="hex">
+        <tr class="exh"><td>무엇을 세나</td><td>검색</td><td>그룹 정규식</td></tr>
+        <tr class="ex"><td>메일박스 <b>파일 없음 오류</b>를 사용자별로</td>
+            <td>no file for message name</td><td>maildir/[^/]+/([^/]+)/</td></tr>
+        <tr class="ex"><td>같은 오류를 <b>사용자 / 폴더</b>별로</td>
+            <td>no file for message name</td><td>maildir/[^/]+/([^/]+)/(\.?[^ ]+)$</td></tr>
+        <tr class="ex"><td>같은 오류를 <b>도메인 / 사용자</b>별로</td>
+            <td>no file for message name</td><td>maildir/([^/]+)/([^/]+)/</td></tr>
+        <tr class="ex"><td>한 사람만(<b>hoonkim</b>) 폴더별로</td>
+            <td>no file for message name</td><td>maildir/[^/]+/hoonkim/(\.?[^ ]+)$</td></tr>
+        <tr class="ex"><td><b>예외 종류</b>별 발생 건수</td>
+            <td></td><td>^([\w.$]+(?:Exception|Error)):</td></tr>
+        <tr class="ex"><td>예외가 터진 <b>소스 위치</b>별</td>
+            <td></td><td>at ([\w.$]+\.[\w$]+)\([\w$]+\.java:\d+\)</td></tr>
+        <tr class="ex"><td><b>응답코드</b>별 (SMTP·POP3·IMAP)</td>
+            <td></td><td>^\[(\d{3})[ \]]</td></tr>
+        <tr class="ex"><td>메일 주소의 <b>도메인</b>별</td>
+            <td></td><td>@([\w-]+\.[\w.-]+)</td></tr>
+        <tr class="ex"><td>maildir 경로가 나오는 <b>모든 줄</b>을 사용자별로</td>
+            <td></td><td>maildir/[^/]+/([^/]+)/</td></tr>
+      </table>
+      <p><b>주의</b> — 집계는 <b>줄 단위</b>라, 서로 다른 줄에 있는 값은 한 번에 묶을 수 없습니다.
+         <code>IO file not found from</code> 은 WARN 줄에 있고 <code>maildir/…</code> 경로는 바로 다음 예외 줄에 있어서,
+         그 문구로 검색한 뒤 경로로 묶으면 0건이 됩니다. 이때는 같은 줄에 있는 <code>no file for message name</code> 으로 검색하세요.</p>
+      <p>반대로 검색을 비우고 경로로만 묶으면 오류가 아닌 줄(메일 삭제·저장 로그 등)까지 세므로, 건수가 실제 오류보다 훨씬 커집니다.</p>
+
+      <h4>자주 쓰는 조각</h4>
+      <table>
+        <tr><td><code>[^/]+</code></td><td><code>/</code> 가 아닌 글자 1개 이상 — 경로에서 한 칸만 집을 때</td></tr>
+        <tr><td><code>\S+</code> · <code>.+</code></td><td>공백 아닌 글자 · 아무 글자 (줄 끝까지)</td></tr>
+        <tr><td><code>\d+</code> · <code>\w+</code></td><td>숫자 · 영문/숫자/<code>_</code></td></tr>
+        <tr><td><code>^</code> · <code>$</code></td><td>메시지 본문의 시작 · 끝</td></tr>
+        <tr><td><code>(?: )</code></td><td>묶기만 하고 키에는 넣지 않는 그룹</td></tr>
+        <tr><td><code>a|b</code></td><td>a 또는 b</td></tr>
+        <tr><td><code>\.</code></td><td>점 글자 그 자체 (<code>.</code> 만 쓰면 “아무 글자”라는 뜻)</td></tr>
+      </table>
+
+      <h4>검색칸에서도 쓸 수 있어요</h4>
+      <p>이 <b>검색</b> 칸과 트레이스·에러 탭의 검색칸 모두 <code>/</code> 로 시작하면 정규식으로 걸러냅니다.
+         <code>/</code> 없이 쓰면 지금까지처럼 글자 그대로 찾습니다.</p>
+      <table>
+        <tr><td><code>hoonkim</code></td><td>그 글자가 들어간 행 (지금까지와 같음)</td></tr>
+        <tr><td><code>/^hoonkim$/</code></td><td>정확히 <code>hoonkim</code> 인 행만</td></tr>
+        <tr><td><code>/hoonkim|jclee/</code></td><td>둘 중 하나가 들어간 행</td></tr>
+        <tr><td><code>/Trash/i</code></td><td>대소문자 무시</td></tr>
+      </table>
+      <p>정규식이 아직 완성되지 않았으면 칸 테두리가 빨개지고, 그동안은 걸러내지 않고 전부 보여줍니다.
+         트레이스 탭 검색은 대소문자를 가리지 않습니다.</p>
+
+      <h4>쓰는 순서</h4>
+      <p><b>검색</b>과 <b>그룹 정규식</b>을 채우고 <b>Enter</b> 또는 <b>집계</b> 버튼 → 건수 많은 순으로 정렬됩니다.
+         행을 클릭하면 그 줄이 있는 트레이스로 이동합니다.</p>
+      <p>집계에 쓰인 줄 수는 오른쪽 힌트에 <code>검색 N줄 · 집계 N줄 · 전체 N줄</code> 로 표시됩니다.</p>
+    </div>
+  </div>
+</div>
+
+<div id="ftpmask">
+  <div id="ftpdlg">
+    <h3>SFTP 가져오기<span class="sp"></span><span id="ftpwho"></span>
+      <button class="x" id="fclose" title="닫기">✕</button></h3>
+
+    <div id="ftpconn">
+      <div id="ftpsites">
+        <div class="hd">저장된 연결</div>
+        <ul id="sitelist"></ul>
+        <div class="btns">
+          <button id="snew" title="입력란 비우기">새 연결</button>
+          <button id="sdel" title="선택한 연결 삭제">삭제</button>
+        </div>
+      </div>
+      <div class="ftpform">
+        <label for="fname">이름</label>
+        <input class="full" type="text" id="fname" placeholder="운영 메일서버">
+        <label for="fhost">호스트</label><input type="text" id="fhost" placeholder="log.example.com">
+        <label for="fport">포트</label><input type="text" id="fport" value="22">
+        <label for="fuser">사용자</label><input type="text" id="fuser" placeholder="james">
+        <label for="fauth">인증</label><select id="fauth">
+          <option value="pw">비밀번호</option><option value="key">개인키</option></select>
+
+        <label class="a-pw" for="fpass">비밀번호</label>
+        <input class="full a-pw" type="password" id="fpass">
+
+        <label class="a-key hide" for="fkey">개인키</label>
+        <span class="full fld a-key hide">
+          <input type="text" id="fkey" placeholder="~/.ssh/id_rsa">
+          <button id="fkeybtn">찾아보기…</button></span>
+        <label class="a-key hide" for="fkeypp">키 암호</label>
+        <input class="full a-key hide" type="password" id="fkeypp" placeholder="없으면 비워 두세요">
+
+        <label for="fpath">시작 경로</label>
+        <input class="full" type="text" id="fpath" placeholder="/var/log/james (비우면 홈 디렉터리)">
+
+        <label></label>
+        <label class="ck"><input type="checkbox" id="fsavepw"> 비밀번호·키 암호도 함께 저장</label>
+        <p class="ftphint">SSH(SFTP) 프로토콜로 접속합니다. [저장]을 누르면 왼쪽 목록에 추가되고,
+          비밀번호는 OS 자격 증명(DPAPI/키체인)으로 암호화해 이 PC에만 보관합니다.</p>
+      </div>
+    </div>
+
+    <div id="ftpbrowse" class="hide">
+      <div class="ftpbar">
+        <button id="fup" title="상위 폴더">↑</button>
+        <input type="text" id="fcwd" spellcheck="false">
+        <button id="fgocwd">이동</button>
+        <button id="frefresh" title="새로고침">↻</button>
+      </div>
+      <div id="ftplist"></div>
+    </div>
+
+    <div id="ftpfoot">
+      <span id="ftpmsg"></span>
+      <button id="fsave">저장</button>
+      <button id="fdisc" class="hide">연결 해제</button>
+      <button class="pri" id="fgo">접속</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   0. 유틸
+   ============================================================ */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const nf = n => n.toLocaleString('ko-KR');
+const esc = s => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const pad2 = n => n < 10 ? '0' + n : '' + n;
+function hhmmss(ts){ const d=new Date(ts); return pad2(d.getUTCHours())+':'+pad2(d.getUTCMinutes())+':'+pad2(d.getUTCSeconds()); }
+function hhmmssS(ts){ const d=new Date(ts); return hhmmss(ts)+'.'+String(d.getUTCMilliseconds()).padStart(3,'0'); }
+function hhmm(ts){ const d=new Date(ts); return pad2(d.getUTCHours())+':'+pad2(d.getUTCMinutes()); }
+function dur(ms){ return ms<1000 ? ms+'ms' : ms<60000 ? (ms/1000).toFixed(1)+'s' : Math.floor(ms/60000)+'m'+pad2(Math.round(ms%60000/1000))+'s'; }
+function bytes(n){ return n<1024?n+'B':n<1048576?(n/1024).toFixed(1)+'KB':(n/1048576).toFixed(1)+'MB'; }
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* ============================================================
+   1. 저장소 — 원문 1개 + 타입배열 인덱스 (본문은 offset으로만 보관)
+   ============================================================ */
+const KIND = { JAMES:0, GC:1, HZH:2, HZB:3, RAW:4 };
+const LVNAME = ['TRACE','DEBUG','INFO','WARN','ERROR'];
+
+let TEXT = '';                 // 파일 전체 문자열
+const blankL = () => ({        // 줄 단위 인덱스 (typed array)
+  n:0, start:null, end:null, msgs:null,
+  kind:null, level:null, ts:null, thread:null, logger:null, trace:null
+});
+let L = blankL();
+let pool = [], poolMap = new Map();
+function intern(s){ let i = poolMap.get(s); if(i===undefined){ i = pool.length; pool.push(s); poolMap.set(s,i); } return i; }
+
+const rawLine = i => TEXT.slice(L.start[i], L.end[i]);
+const msgOf   = i => TEXT.slice(L.msgs[i],  L.end[i]);
+
+/* union-find (그룹 키) */
+let ufKey, ufPar;
+function K(s){ let i = ufKey.get(s); if(i===undefined){ i = ufPar.length; ufPar.push(i); ufKey.set(s,i); } return i; }
+function find(x){ let r=x; while(ufPar[r]!==r) r=ufPar[r]; while(ufPar[x]!==r){ const nx=ufPar[x]; ufPar[x]=r; x=nx; } return r; }
+function uni(a,b){ a=find(a); b=find(b); if(a!==b) ufPar[b]=a; }
+
+let TRACES = [];
+
+/* ============================================================
+   2. 파서
+   ============================================================ */
+let _dstr='', _dms=0;
+function dateBase(s){                       // "2026/09/08 00:00:32"
+  if(s !== _dstr){ _dstr = s; _dms = Date.UTC(+s.slice(0,4), +s.slice(5,7)-1, +s.slice(8,10)); }
+  return _dms;
+}
+/** " Id='356609056' User='' …" → "356609056" */
+function readSessId(m){
+  const i = m.indexOf("Id='"); if(i < 0) return null;
+  const j = m.indexOf("'", i+4); return (j<0 || j-i>24) ? null : m.slice(i+4, j);
+}
+/** " ID=-913451677 Connection …" → "-913451677" */
+function readImapId(m){
+  let i = m.indexOf('ID='); if(i < 0) return null;
+  if(i > 0 && m.charCodeAt(i-1) > 32) return null;      // 앞이 공백이어야 함
+  let j = i+3; if(m.charCodeAt(j) === 45) j++;
+  const s = j; while(j < m.length && m.charCodeAt(j) >= 48 && m.charCodeAt(j) <= 57) j++;
+  return j === s ? null : m.slice(i+3, j);
+}
+/** "Mail1788793232009-1afd8713-…" 형태 추출 */
+const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+function readMailId(m){
+  let i = -1;
+  while((i = m.indexOf('Mail', i+1)) >= 0){
+    let j = i+4; const s = j;
+    while(j < m.length && m.charCodeAt(j) >= 48 && m.charCodeAt(j) <= 57) j++;
+    if(j - s < 10 || m.charCodeAt(j) !== 45) continue;
+    const e = j + 37;                                    // '-' + uuid(36)
+    if(e > m.length) continue;
+    if(RE_UUID.test(m.slice(j+1, e))) return m.slice(i, e);
+  }
+  return null;
+}
+/** " Id='356609056' User='' 본문" 에서 본문만 떼어낸다 */
+function body(m){
+  if(m.startsWith("Id=" + "'")){
+    const i = m.indexOf("' User='");
+    if(i > 0){ const j = m.indexOf("' ", i + 8); if(j > 0) return m.slice(j + 2); }
+  }
+  if(m.startsWith("ID=")){ const i = m.indexOf(" "); if(i > 0) return m.slice(i + 1); }
+  return m;
+}
+/** GC 로그 판별 — 통합 로깅(-Xlog:gc*)은 데코레이터(uptime/시각/pid…)가 설정마다 달라
+    태그·본문으로 가르고, JDK8 스타일(-verbose:gc / PrintGCDetails)도 함께 받는다. */
+function isGcLine(c, rest){
+  if(/(?:^|: )\[(?:Full )?GC[ (]/.test(rest)) return true;        // "12345.6: [GC (Allocation Failure) …"
+  if(c !== 91 /* [ */) return false;
+  return /^(?:\[[^\]]*\])+ /.test(rest) &&
+         (/\[gc[,\]]/.test(rest) || rest.indexOf('GC(') >= 0);   // "[…][info][gc] GC(12) …"
+}
+function readGcNo(r){
+  const i = r.indexOf('GC('); if(i < 0) return null;
+  const j = r.indexOf(')', i+3); return j<0 ? null : r.slice(i+3, j);
+}
+
+/* 스레드 구간(segment) 상태 */
+let segIdx = null, segTs = null, segMail = null, segLen = null;
+
+function parseAll(text, onProgress){
+  TEXT = text;
+  /* --- 2-1. 줄 오프셋 --- */
+  const off = [];
+  let p = 0;
+  while(p < text.length){
+    let e = text.indexOf('\n', p);
+    if(e < 0) e = text.length;
+    let q = e; if(q > p && text.charCodeAt(q-1) === 13) q--;   // \r 제거
+    if(q > p) off.push(p, q);
+    p = e + 1;
+  }
+  const n = off.length >> 1;
+  L.n = n;
+  L.start  = new Uint32Array(n); L.end    = new Uint32Array(n);
+  L.msgs   = new Uint32Array(n); L.kind   = new Uint8Array(n);
+  L.level  = new Uint8Array(n);  L.ts     = new Float64Array(n);
+  L.thread = new Uint32Array(n); L.logger = new Uint32Array(n);
+  L.trace  = new Int32Array(n).fill(-1);
+  for(let i=0;i<n;i++){ L.start[i]=off[i*2]; L.end[i]=off[i*2+1]; }
+
+  ufKey = new Map(); ufPar = [];
+  segIdx = new Map(); segTs = new Map(); segMail = new Map(); segLen = new Map();
+  const lineKey = new Int32Array(n).fill(-1);
+
+  /* --- 2-2. 청크 파싱 --- */
+  const CH = 20000;
+  let i = 0;
+  return new Promise(resolve => {
+    function step(){
+      const t0 = performance.now();
+      while(i < n && performance.now() - t0 < 60){
+        const lim = Math.min(n, i + CH);
+        for(; i < lim; i++) parseLine(i, lineKey);
+      }
+      onProgress(i / n, i);
+      if(i < n) setTimeout(step, 0);
+      else { buildTraces(lineKey); resolve(); }
+    }
+    step();
+  });
+}
+
+function parseLine(i, lineKey){
+  const a = L.start[i], b = L.end[i];
+  const p0 = TEXT.indexOf(' | ', a);      if(p0<0||p0>b) return rawCont(i, a, lineKey);
+  const p1 = TEXT.indexOf(' | ', p0+3);   if(p1<0||p1>b) return rawCont(i, a, lineKey);
+  const p2 = TEXT.indexOf(' | ', p1+3);   if(p2<0||p2>b) return rawCont(i, a, lineKey);
+  const wts = TEXT.slice(p1+3, p2);           // "2026/09/08 00:00:32"
+  const base = dateBase(wts);
+  const rs = p2 + 3;
+
+  // --- James 앱 로그 시도 ---
+  const p3 = TEXT.indexOf(' | ', rs);
+  if(p3 > 0 && p3 < b){
+    const p4 = TEXT.indexOf(' | ', p3+3);
+    if(p4 > 0 && p4 < b && p4 - p3 - 3 >= 16 && TEXT.charCodeAt(p4-4) === 44 /* , */){
+      const p5 = TEXT.indexOf(' | ', p4+3), p6 = p5>0 ? TEXT.indexOf(' | ', p5+3) : -1;
+      if(p5 > 0 && p6 > 0 && p6 < b){
+        const lvTs = TEXT.slice(p3+3, p4);                       // "DEBUG 00:00:31,973"
+        const lv = lvTs.charCodeAt(0)===68 ? 1 : lvTs.charCodeAt(0)===73 ? 2
+                 : lvTs.charCodeAt(0)===87 ? 3 : lvTs.charCodeAt(0)===69 ? 4 : 0;
+        const tp = lvTs.length - 12;                             // "HH:MM:SS,mmm" 시작
+        L.kind[i]   = KIND.JAMES;
+        L.level[i]  = lv;
+        L.ts[i]     = base + (+lvTs.substr(tp,2))*3600000 + (+lvTs.substr(tp+3,2))*60000
+                           + (+lvTs.substr(tp+6,2))*1000  + (+lvTs.substr(tp+9,3));
+        L.thread[i] = intern(TEXT.slice(rs, p3));
+        L.logger[i] = intern(TEXT.slice(p4+3, p5));
+        let ms = p6 + 3; while(ms < b && TEXT.charCodeAt(ms) === 32) ms++;
+        L.msgs[i] = ms;
+        lineKey[i] = keyJames(i, TEXT.slice(ms, b));
+        return;
+      }
+    }
+  }
+  // --- 나머지 3종 ---
+  L.msgs[i] = rs;
+  L.ts[i] = base + (+wts.substr(11,2))*3600000 + (+wts.substr(14,2))*60000 + (+wts.substr(17,2))*1000;
+  L.level[i] = 2;
+  const c = TEXT.charCodeAt(rs);
+  const rest = TEXT.slice(rs, Math.min(b, rs+120));
+  if(isGcLine(c, rest)){
+    L.kind[i] = KIND.GC;
+    L.logger[i] = intern('jvm.gc');
+    if(/\]\[warning\]|\]\[error\]/.test(rest)) L.level[i] = 3;
+    const g = readGcNo(rest);
+    lineKey[i] = K(g ? 'gc:'+g : 'gc:@'+hhmm(L.ts[i]));
+  } else if(/^[A-Z][a-z]{2} \d\d, \d{4} /.test(rest)){
+    L.kind[i] = KIND.HZH; L.logger[i] = intern('hazelcast');
+    lineKey[i] = K('hz:'+Math.floor(L.ts[i]/1000));
+  } else if(rest.startsWith('INFO: ') || rest.startsWith('WARNING: ') || rest.startsWith('SEVERE: ')){
+    L.kind[i] = KIND.HZB; L.logger[i] = intern('hazelcast');
+    if(rest.charCodeAt(0) !== 73) L.level[i] = rest.charCodeAt(0)===83 ? 4 : 3;
+    lineKey[i] = K('hz:'+Math.floor(L.ts[i]/1000));
+  } else {
+    rawCont(i, rs, lineKey);
+  }
+}
+
+/** 스택트레이스 등 “이어지는 줄” — 바로 앞줄의 그룹/레벨/로거를 물려받는다 */
+function rawCont(i, ms, lineKey){
+  L.kind[i] = KIND.RAW; L.msgs[i] = ms;
+  if(!L.ts[i] && i > 0) L.ts[i] = L.ts[i-1];
+  const c = TEXT.charCodeAt(ms);
+  const cont = c === 9 || c === 32 || TEXT.startsWith('at ', ms) || TEXT.startsWith('... ', ms) ||
+               TEXT.startsWith('Caused by:', ms) || TEXT.startsWith('Suppressed:', ms);
+  if(cont && i > 0 && lineKey[i-1] >= 0){
+    L.logger[i] = L.logger[i-1]; L.thread[i] = L.thread[i-1];
+    L.level[i]  = L.level[i-1];  L.ts[i]     = L.ts[i-1];
+    lineKey[i]  = lineKey[i-1];
+  } else {
+    L.logger[i] = intern('raw'); L.level[i] = 2;
+    lineKey[i] = K('raw:' + hhmm(L.ts[i]));      // 붙일 곳이 없으면 분 단위로 묶는다
+  }
+}
+
+/** James 줄 하나의 그룹 키들을 만들고 union → 대표 키 반환 */
+function keyJames(i, msg){
+  const lg = pool[L.logger[i]], th = pool[L.thread[i]], ts = L.ts[i];
+  const ks = [];
+
+  const sid = readSessId(msg);
+  if(sid) ks.push(K((lg === 'james.pop3server' ? 'pop3:' : 'smtp:') + sid));
+  else { const iid = readImapId(msg); if(iid) ks.push(K('imap:' + iid)); }
+
+  const mid = readMailId(msg);
+  if(mid) ks.push(K('mail:' + mid));
+
+  // 스레드 구간 키 (스풀러는 항상, 그 외는 다른 키가 없을 때)
+  const isSpool = th.charCodeAt(0) === 115 && th.startsWith('spooler-');
+  if(isSpool || ks.length === 0){
+    const last = segTs.get(th), gap = isSpool ? 1500 : 3000;
+    let seg = segIdx.get(th) || 0, len = segLen.get(th) || 0;
+    // 스풀 처리 1건은 [NaonGenericMatcher] Notify 로 시작하고 바로 다음 줄이 [MailIsLazyTransport].
+    // 앞 줄이 없는 경우(약 4%)를 위해 Lazy 도 마커로 쓰되, 방금 연 구간은 다시 쪼개지 않는다.
+    const marker = isSpool && (msg.startsWith('[NaonGenericMatcher] Notify ?') ||
+                              (msg.startsWith('[MailIsLazyTransport]') && len > 1));
+    const mailChanged = mid && segMail.get(th) && segMail.get(th) !== mid;
+    if(last === undefined || ts - last > gap || marker || mailChanged){
+      seg++; len = 0; segIdx.set(th, seg); segMail.set(th, null);
+    }
+    segTs.set(th, ts); segLen.set(th, len + 1);
+    if(mid) segMail.set(th, mid);
+    ks.push(K('th:' + th + '#' + seg));
+  }
+  for(let k=1;k<ks.length;k++) uni(ks[0], ks[k]);
+  return ks[0];
+}
+
+/* ============================================================
+   3. 트레이스 조립 + 요약
+   ============================================================ */
+const TYPES = {
+  mail : {label:'메일',   icon:'📧', color:'--series-1'},
+  smtp : {label:'SMTP',   icon:'✉️', color:'--series-2'},
+  imap : {label:'IMAP',   icon:'📥', color:'--series-3'},
+  pop3 : {label:'POP3',   icon:'📮', color:'--series-4'},
+  gc   : {label:'GC',     icon:'♻️', color:'--series-7'},
+  hz   : {label:'상태',   icon:'📈', color:'--series-5'},
+  etc  : {label:'기타',   icon:'·',  color:'--series-6'}
+};
+
+function buildTraces(lineKey){
+  const byRoot = new Map();
+  for(let i=0;i<L.n;i++){
+    const k = lineKey[i]; if(k < 0) continue;
+    const r = find(k);
+    let t = byRoot.get(r);
+    if(t === undefined){ t = TRACES.length; byRoot.set(r, t); TRACES.push({ lines:[], t0:Infinity, t1:-Infinity }); }
+    L.trace[i] = t;
+    const tr = TRACES[t];
+    tr.lines.push(i);
+    if(L.ts[i] < tr.t0) tr.t0 = L.ts[i];
+    if(L.ts[i] > tr.t1) tr.t1 = L.ts[i];
+  }
+  TRACES.forEach(summarize);
+  TRACES.sort((a,b) => a.t0 - b.t0);
+  for(let t = 0; t < TRACES.length; t++)              // 정렬 후 줄→트레이스 매핑 재작성
+    for(const i of TRACES[t].lines) L.trace[i] = t;
+}
+
+function summarize(tr){
+  const s = { from:'', to:[], subj:'', size:0, mailId:'', ip:'', user:'', folders:[],
+              result:'', sendMs:0, codes:[], hookOk:0, hookDec:0, warns:0, errs:0,
+              cmds:[], conn:false, gcKind:'', gcMs:0, gcHeap:'', heapPct:0, threads:0, spam:false, relay:false };
+  let hasS=false, hasM=false, hasI=false, hasP=false, hasG=false, hasH=false;
+
+  for(const i of tr.lines){
+    const lv = L.level[i], kd = L.kind[i], lg = pool[L.logger[i]];
+    if(kd !== KIND.RAW){ if(lv === 3) s.warns++; else if(lv === 4) s.errs++; }
+
+    if(kd === KIND.GC){ hasG = true; const r = msgOf(i); pickGc(s, r); continue; }
+    if(kd === KIND.HZH || kd === KIND.HZB){ hasH = true; if(kd===KIND.HZB) pickHz(s, msgOf(i)); continue; }
+    if(kd !== KIND.JAMES) continue;
+
+    if(lg === 'james.smtpserver') hasS = true;
+    else if(lg === 'james.imapserver') hasI = true;
+    else if(lg === 'james.pop3server') hasP = true;
+    else if(lg === 'james.mailetcontext') hasM = true;
+
+    const m = body(msgOf(i));
+    // HealthMonitor 는 slf4j 를 타면 James 포맷으로 찍힌다 (레벨도 INFO/DEBUG 둘 다)
+    if(m.indexOf('heap.memory.used/max=') >= 0){ hasH = true; pickHz(s, m); continue; }
+    if(lv === 1){                                   // DEBUG = hook 잡음 → 카운트만
+      if(m.indexOf('result=1 (OK)') >= 0) s.hookOk++;
+      else if(m.indexOf('result=') >= 0) s.hookDec++;
+      else if(m.startsWith('org.apache.james.protocols.api.handler.CommandDispatcher received: '))
+        s.cmds.push(m.slice(66));
+      else if(m.startsWith('message size : ')) s.size = +m.slice(15) || s.size;
+      continue;
+    }
+    pickInfo(s, m, lg);
+  }
+  const ty = hasM ? 'mail' : hasS ? 'smtp' : hasI ? 'imap' : hasP ? 'pop3' : hasG ? 'gc' : hasH ? 'hz' : 'etc';
+  tr.type = ty; tr.s = s; tr.n = tr.lines.length; tr.d = tr.t1 - tr.t0;
+  tr.sev = s.errs ? 3 : s.warns ? 2 : (s.result && s.result !== 'SUCCESS') ? 2 : 0;
+  tr.q = (ty+' '+s.from+' '+s.to.join(' ')+' '+s.subj+' '+s.ip+' '+s.user+' '+s.mailId+' '+
+          s.folders.join(' ')+' '+s.result+' '+s.gcKind).toLowerCase();
+}
+
+function pickInfo(s, m, lg){
+  let x;
+  // 아래 규칙들은 첫 매치에서 return 하므로, 어디에나 섞여 나오는 값은 여기서 먼저 훑는다
+  if((x = /^\[(\d{3}|\d\.\d\.\d) /.exec(m)) && !s.codes.includes(x[1])) s.codes.push(x[1]);
+  if(!s.mailId){ const mm = readMailId(m); if(mm) s.mailId = mm; }
+  if((x = /Connection established from (\S+)/.exec(m))){ s.ip = x[1]; s.conn = true; return; }
+  if(m.indexOf('Connection closed') >= 0) return;
+  if((x = /\[MAIL\]\[FROM: ?<(.*?)>\]\[(\S+?)\]/.exec(m))){ s.from = x[1]; s.ip = s.ip || x[2]; return; }
+  if((x = /\[RCPT\]\[TO: ?<(.*?)>\]/.exec(m))){ if(!s.to.includes(x[1])) s.to.push(x[1]); return; }
+  // 메일릿: "1: 받는사람 | 적용규칙 <- 보낸사람"
+  if((x = /^\d+: (\S+) \| .*? <- (?:.* )?<?([\w.+-]+@[\w.-]+)>? args=/.exec(m))){
+    if(!s.to.includes(x[1])) s.to.push(x[1]); s.from = s.from || x[2]; return; }
+  // 원격 전달: "S : 보낸사람 , R : 받는사람"
+  if((x = /^S : (\S+) , R : (\S+)/.exec(m))){
+    s.from = s.from || x[1]; if(!s.to.includes(x[2])) s.to.push(x[2]); s.relay = true; return; }
+  if((x = /Successfully spooled mail (\S+) from (\S+) on (\S+?)\/(\S+?) for (\d+)/.exec(m))){
+    s.mailId = x[1]; s.from = s.from || x[2]; s.ip = s.ip || x[4]; return; }
+  if((x = /MAIN INFO - SUBJECT : \{\} - \{\} args=\[(.*), (Mail\S+)\]/.exec(m))){
+    s.subj = x[1]; s.mailId = s.mailId || x[2]; return; }
+  if((x = /\[SUBJECT : (.*?)\]\[(Mail\S+?)\]/.exec(m))){ s.subj = s.subj || x[1]; s.mailId = s.mailId || x[2]; return; }
+  if((x = /\[SimpleLocalDelivery\] Delivered (\w+) successfully from (\S+) to (\S+) in folder (.+?) args=/.exec(m))){
+    s.from = s.from || x[2]; if(!s.to.includes(x[3])) s.to.push(x[3]);
+    if(!s.folders.includes(x[4])) s.folders.push(x[4]);
+    if(x[1] === 'spam') s.spam = true; return; }
+  if((x = /SimpleSendMessage Result: (\w+)/.exec(m))){ s.result = x[1]; return; }
+  if((x = /Mail is sended for (\d+) ms/.exec(m))){ s.sendMs = +x[1]; return; }
+  if((x = /Login failed: [^,]*, (\S+?)\/(\S+?) /.exec(m))){ s.ip = s.ip || x[1]; s.user = s.user || x[2]; s.result = 'LOGIN FAILED'; return; }
+  if((x = /Failed to get user :(\S+?),/.exec(m))){ s.user = s.user || x[1]; s.result = s.result || 'AUTH FAILED'; return; }
+  if((x = /User='([^']+)'/.exec(m))) s.user = s.user || x[1];
+}
+const kb2mb = k => Math.round(+k / 1024);
+function pickGc(s, r){
+  let x;
+  // JDK8: "[GC (Allocation Failure) [PSYoungGen: 65536K->10736K(76288K)] 165536K->110744K(251392K), 0.0254310 secs]"
+  if((x = /\[(Full GC|GC) \((.+?)\)(?=[ \[])[\s\S]*?(\d+)K->(\d+)K\((\d+)K\), (?:\[[^\]]*\], )*([\d.]+) secs\]/.exec(r))){
+    s.gcKind = x[1] + ' (' + x[2] + ')';
+    s.gcHeap = kb2mb(x[3]) + 'M→' + kb2mb(x[4]) + 'M / ' + kb2mb(x[5]) + 'M';
+    s.gcMs = Math.max(s.gcMs, +x[6] * 1000); return; }
+  if((x = /GC\(\d+\) (Pause .+?) (\d+)M->(\d+)M\((\d+)M\) ([\d.]+)ms/.exec(r))){
+    s.gcKind = x[1]; s.gcHeap = x[2]+'M→'+x[3]+'M / '+x[4]+'M'; s.gcMs = Math.max(s.gcMs, +x[5]); return; }
+  if(!s.gcKind && (x = /GC\(\d+\) (Concurrent [\w ]+?)(?: [\d.]+ms)?$/.exec(r))) s.gcKind = x[1];
+  if(!s.gcMs  && (x = /GC\(\d+\) Pause .*? ([\d.]+)ms$/.exec(r))) s.gcMs = +x[1];
+}
+function pickHz(s, r){
+  let x;
+  if((x = /heap\.memory\.used\/max=([\d.]+)%/.exec(r))) s.heapPct = +x[1];
+  if((x = /thread\.count=(\d+)/.exec(r)))               s.threads = +x[1];
+}
+
+/* ============================================================
+   4. 트레이스 뷰
+   ============================================================ */
+const ROW_H = 78;
+let filtered = [], selected = -1, typeFilter = new Set(), showNoise = false;
+
+function traceTitle(tr){
+  const s = tr.s;
+  switch(tr.type){
+    case 'mail': case 'smtp':
+      return s.subj || (s.from ? s.from + ' → ' + (s.to[0]||'?') : (s.ip ? s.ip + ' 접속' : 'SMTP 세션'));
+    case 'imap': case 'pop3': return s.user || s.ip || tr.type.toUpperCase();
+    case 'gc':   return s.gcKind || 'GC 사이클';
+    case 'hz':   return 'HealthMonitor';
+    default:     return pool[L.logger[tr.lines[0]]] + ' — ' + msgOf(tr.lines[0]).slice(0, 70);
+  }
+}
+function traceSub(tr){
+  const s = tr.s, p = [];
+  if(tr.type === 'mail' || tr.type === 'smtp'){
+    if(s.from) p.push(s.from + ' → ' + (s.to.length > 1 ? s.to[0] + ' 외 ' + (s.to.length-1) : (s.to[0]||'?')));
+    if(s.folders.length) p.push('📁 ' + s.folders.join(', '));
+    if(!s.from) p.push(s.result || (s.conn ? '접속 후 종료 (메일 없음)' : ''));
+    if(s.relay) p.push('원격 전달');
+  } else if(tr.type === 'imap' || tr.type === 'pop3'){
+    if(s.user && s.ip) p.push(s.ip);
+    p.push(s.result || (s.conn ? '접속 후 종료' : ''));
+  } else if(tr.type === 'gc'){ if(s.gcHeap) p.push(s.gcHeap); }
+  else if(tr.type === 'hz'){ if(s.heapPct) p.push('heap ' + s.heapPct + '% · thread ' + nf(s.threads)); }
+  else if(s.ip) p.push(s.ip);
+  return p.filter(Boolean).join('   ');
+}
+function traceMeta(tr){
+  const s = tr.s, p = [];
+  p.push(tr.n + '줄');
+  if(tr.d > 0) p.push(dur(tr.d));
+  if(s.size) p.push(bytes(s.size));
+  if(s.sendMs) p.push('배달 ' + s.sendMs + 'ms');
+  if(s.gcMs) p.push('pause ' + s.gcMs + 'ms');
+  if(s.hookDec + s.hookOk) p.push('hook ' + (s.hookOk ? s.hookOk + ' OK/' : '') + s.hookDec + ' declined');
+  if(s.ip && tr.type !== 'imap' && tr.type !== 'pop3') p.push(s.ip);
+  return p.join(' · ');
+}
+function badgeOf(tr){
+  const s = tr.s;
+  if(s.errs) return ['b-crit', 'ERROR ' + s.errs];
+  if(s.result && s.result !== 'SUCCESS') return ['b-crit', s.result];
+  if(s.warns) return ['b-warn', 'WARN ' + s.warns];
+  if(s.spam) return ['b-warn', 'SPAM'];
+  if(s.result === 'SUCCESS') return ['b-ok', 'SUCCESS'];
+  if(tr.type === 'smtp' && s.mailId) return ['b-ok', '수신'];
+  return null;
+}
+
+function buildChips(){
+  const cnt = {};
+  for(const t of TRACES) cnt[t.type] = (cnt[t.type]||0) + 1;
+  const el = $('#typechips'); el.innerHTML = '';
+  const all = document.createElement('button');
+  all.className = 'chip on'; all.dataset.t = '*';
+  all.innerHTML = '전체 <b>' + nf(TRACES.length) + '</b>';
+  el.appendChild(all);
+  for(const k of Object.keys(TYPES)){
+    if(!cnt[k]) continue;
+    const b = document.createElement('button');
+    b.className = 'chip'; b.dataset.t = k;
+    b.innerHTML = '<i class="dot" style="background:var(' + TYPES[k].color + ')"></i>' +
+                  TYPES[k].label + ' <b>' + nf(cnt[k]) + '</b>';
+    el.appendChild(b);
+  }
+  $$('#typechips .chip').forEach(c =>
+    c.classList.toggle('on', c.dataset.t === '*' ? typeFilter.size === 0 : typeFilter.has(c.dataset.t)));
+  el.onclick = e => {
+    const b = e.target.closest('.chip'); if(!b) return;
+    const t = b.dataset.t;
+    if(t === '*'){ typeFilter.clear(); }
+    else { typeFilter.has(t) ? typeFilter.delete(t) : typeFilter.add(t); }
+    $$('#typechips .chip').forEach(c =>
+      c.classList.toggle('on', c.dataset.t === '*' ? typeFilter.size === 0 : typeFilter.has(c.dataset.t)));
+    applyFilter();
+  };
+}
+
+/** 검색어 → 술어. "/패턴/플래그" 로 감싸면 정규식, 아니면 지금까지처럼 부분 문자열(대소문자 무시).
+    split: 공백으로 나눠 모두 포함(AND) · ci: 정규식에 i 플래그를 강제
+    아직 완성되지 않은 정규식이면 fn:null + err → 걸러내지 않고 칸만 빨갛게 표시한다 */
+function mkMatch(q, split, ci){
+  const s = q.trim();
+  if(!s) return {fn:null, err:''};
+  const m = /^\/(.*)\/([gimsuy]*)$/.exec(s);
+  if(m || s.charAt(0) === '/'){                  // 끝 '/' 를 아직 안 찍었어도 정규식으로 읽는다
+    let f = m ? m[2].replace(/g/g, '') : '';
+    if(ci && f.indexOf('i') < 0) f += 'i';
+    try{ const re = new RegExp(m ? m[1] : s.slice(1), f); return {fn: t => re.test(t), err:''}; }
+    catch(e){ return {fn:null, err:String((e && e.message) || e)}; }
+  }
+  const lo = s.toLowerCase();
+  if(!split) return {fn: t => t.toLowerCase().indexOf(lo) >= 0, err:''};
+  const ws = lo.split(/\s+/);
+  return {fn: t => { const x = t.toLowerCase(); return ws.every(w => x.indexOf(w) >= 0); }, err:''};
+}
+/** 검색칸에 정규식 오류를 표시하고 술어를 돌려준다 */
+function search(sel, split, ci){
+  const M = mkMatch($(sel).value, split, ci);
+  $(sel).classList.toggle('bad', !!M.err);
+  return M.fn;
+}
+
+function applyFilter(){
+  const hit = search('#q', true, true);          // 트레이스 색인(t.q)은 소문자라 정규식도 대소문자 무시
+  filtered = TRACES.filter(t => {
+    if(typeFilter.size && !typeFilter.has(t.type)) return false;
+    return !hit || hit(t.q);
+  });
+  const so = $('#sort').value;
+  if(so === 'n') filtered.sort((a,b) => b.n - a.n);
+  else if(so === 'd') filtered.sort((a,b) => b.d - a.d);
+  else if(so === 's') filtered.sort((a,b) => b.sev - a.sev || a.t0 - b.t0);
+  else filtered.sort((a,b) => a.t0 - b.t0);
+  $('#listcnt').textContent = nf(filtered.length) + ' / ' + nf(TRACES.length);
+  $('#listInner').style.height = (filtered.length * ROW_H) + 'px';
+  $('#list').scrollTop = 0;
+  renderList();
+}
+
+function renderList(){
+  const box = $('#list'), inner = $('#listInner');
+  const top = box.scrollTop, h = box.clientHeight;
+  const a = Math.max(0, Math.floor(top / ROW_H) - 3);
+  const b = Math.min(filtered.length, Math.ceil((top + h) / ROW_H) + 3);
+  let out = '';
+  for(let i = a; i < b; i++){
+    const tr = filtered[i], T = TYPES[tr.type], bd = badgeOf(tr);
+    out += '<div class="row' + (tr === selected ? ' sel' : '') + '" style="top:' + (i*ROW_H) + 'px" data-i="' + i + '">' +
+      '<div class="l1">' +
+        '<span class="tag" style="background:var(' + T.color + ')">' + T.label + '</span>' +
+        '<span class="t">' + hhmmss(tr.t0) + '</span>' +
+        '<span class="ttl">' + esc(traceTitle(tr)) + '</span>' +
+        (bd ? '<span class="badge ' + bd[0] + '">' + esc(bd[1]) + '</span>' : '') +
+      '</div>' +
+      '<div class="l2">' + esc(traceSub(tr)) + '</div>' +
+      '<div class="l3">' + esc(traceMeta(tr)) + '</div>' +
+    '</div>';
+  }
+  inner.innerHTML = out;
+}
+
+function isNoise(i){
+  if(L.level[i] !== 1) return false;
+  const m = msgOf(i);
+  return m.startsWith('executing hook') || m.startsWith('Lookup command handler') ||
+         m.indexOf('HookResultLogger') >= 0 || m.indexOf('HookResultJMXMonitor') >= 0 ||
+         /: result=\d+ \(/.test(m);
+}
+
+function lineHtml(i){
+  const nz = isNoise(i);
+  return '<div class="ln' + (nz ? ' noise' : '') + (nz && !showNoise ? ' hidden' : '') + '">' +
+    '<span class="lt">' + hhmmssS(L.ts[i]) + '</span>' +
+    '<span class="ll lv-' + L.level[i] + '">' + LVNAME[L.level[i]] + '</span>' +
+    '<span class="lg">' + esc(pool[L.logger[i]].replace('james.','')) + '</span>' +
+    '<span>' + esc(msgOf(i)) + '</span></div>';
+}
+function showDetail(tr){
+  selected = tr; renderList();
+  const s = tr.s, T = TYPES[tr.type], bd = badgeOf(tr);
+  const kv = [];
+  const add = (k, v) => { if(v) kv.push('<dt>' + k + '</dt><dd>' + esc(String(v)) + '</dd>'); };
+  add('시각', hhmmssS(tr.t0) + ' → ' + hhmmssS(tr.t1) + '  (' + dur(tr.d) + ')');
+  add('보낸이', s.from); add('받는이', s.to.join(', '));
+  add('제목', s.subj); add('메일 ID', s.mailId);
+  add('폴더', s.folders.join(', '));
+  add('크기', s.size ? bytes(s.size) + ' (' + nf(s.size) + ' bytes)' : '');
+  add('클라이언트', s.ip); add('계정', s.user);
+  add('SMTP 명령', s.cmds.join(' → ')); add('응답코드', s.codes.join(', '));
+  add('결과', s.result + (s.sendMs ? '  (' + s.sendMs + 'ms)' : ''));
+  add('GC', s.gcKind ? s.gcKind + (s.gcHeap ? '  ' + s.gcHeap : '') + (s.gcMs ? '  ' + s.gcMs + 'ms' : '') : '');
+  add('힙/스레드', s.heapPct ? s.heapPct + '% / ' + nf(s.threads) : '');
+  add('hook', (s.hookOk + s.hookDec) ? s.hookOk + '건 OK · ' + s.hookDec + '건 DECLINED' : '');
+
+  const noiseN = tr.lines.filter(isNoise).length;
+  const LIM = 1500, shown = Math.min(tr.n, LIM);
+  const lines = tr.lines.slice(0, LIM).map(lineHtml).join('');
+
+  $('#detail').innerHTML =
+    '<div class="dhead"><h3>' + T.icon + ' ' + esc(traceTitle(tr)) +
+      (bd ? ' <span class="badge ' + bd[0] + '">' + esc(bd[1]) + '</span>' : '') + '</h3>' +
+      '<dl class="kv">' + kv.join('') + '</dl></div>' +
+    '<div class="dtools">' +
+      '<span>' + tr.n + '줄' + (noiseN ? ' · hook 잡음 ' + noiseN + '줄' : '') + '</span>' +
+      (noiseN ? '<label><input type="checkbox" id="cbNoise"' + (showNoise?' checked':'') + '> 잡음 표시</label>' : '') +
+      '<span style="flex:1"></span><button id="btnCopy">원문 복사</button>' +
+    '</div>' +
+    '<div class="lines" id="dlines">' + lines + '</div>' +
+    (tr.n > LIM ? '<div style="padding:10px 16px"><button id="btnMore">다음 ' +
+       nf(Math.min(5000, tr.n - shown)) + '줄 더 보기 (남은 ' + nf(tr.n - shown) + '줄)</button></div>' : '');
+
+  const cb = $('#cbNoise');
+  if(cb) cb.onchange = () => { showNoise = cb.checked; $$('#detail .ln.noise').forEach(e => e.classList.toggle('hidden', !showNoise)); };
+  $('#btnCopy').onclick = () => {
+    navigator.clipboard.writeText(tr.lines.map(rawLine).join('\n'))
+      .then(() => { $('#btnCopy').textContent = '복사됨 ✓'; setTimeout(() => $('#btnCopy').textContent = '원문 복사', 1200); });
+  };
+  let cur = shown;
+  const more = $('#btnMore');
+  if(more) more.onclick = () => {
+    const next = Math.min(tr.n, cur + 5000);
+    $('#dlines').insertAdjacentHTML('beforeend', tr.lines.slice(cur, next).map(lineHtml).join(''));
+    cur = next;
+    if(cur >= tr.n) more.parentNode.remove();
+    else more.textContent = '다음 ' + nf(Math.min(5000, tr.n - cur)) + '줄 더 보기 (남은 ' + nf(tr.n - cur) + '줄)';
+  };
+  $('#detail').scrollTop = 0;
+}
+
+/* ============================================================
+   5. 템플릿 집계
+   ============================================================ */
+let TPL = null, tplSort = {k:'n', dir:-1};
+const TPLHINT0 = '검색으로 셀 줄을 고르고, 그룹 정규식으로 묶어 셉니다 — 집계 버튼을 누르면 함께 적용됩니다. ' +
+                 '둘 다 비우면 메시지를 자동 정규화해 빈도순으로 집계합니다.';
+
+/** 그룹 정규식 읽기 — 비면 re:null. "/패턴/i" 형태도 받는다 (g 플래그는 뗀다) */
+function readGre(){
+  const src = $('#gre').value.trim();
+  if(!src) return {src:'', re:null, err:''};
+  let p = src, f = '';
+  const m = /^\/(.+)\/([gimsuy]*)$/.exec(src);
+  if(m){ p = m[1]; f = m[2].replace(/g/g, ''); }
+  try { return {src:src, re:new RegExp(p, f), err:''}; }
+  catch(e){ return {src:src, re:null, err:String(e.message || e)}; }
+}
+/** 캡처그룹이 있으면 그 값들(여럿이면 ' / ' 로 연결), 없으면 매칭 전체. 안 맞으면 null → 집계 제외 */
+function greKey(re, m){
+  const x = re.exec(m);
+  if(!x) return null;
+  if(x.length === 1) return x[0];
+  const ps = [];
+  for(let k = 1; k < x.length; k++) if(x[k] !== undefined) ps.push(x[k]);
+  return ps.length ? ps.join(' / ') : x[0];
+}
+function normalize(m){
+  return body(m)
+    .replace(/args=\[[\s\S]*\]\s*$/, 'args=[…]')
+    .replace(/Mail\d{10,}-[0-9a-f-]{36}/g, '{MAIL}')
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, '{UUID}')
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '{EMAIL}')
+    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, '{IP}')
+    .replace(/@[0-9a-f]{5,}\b/g, '@{HASH}')
+    .replace(/\b[0-9a-f]{8,}\b/g, '{HEX}')
+    .replace(/'-?\d+'/g, "'{N}'")
+    .replace(/-?\d[\d.,:]*/g, '{N}')
+    .replace(/\s+/g, ' ').trim();
+}
+/* 검색(셀 줄 고르기) → 그룹 정규식(묶기) 을 한 번에 적용한다 */
+function buildTemplates(done){
+  const btn = $('#btntpl'), g = readGre(), q = $('#qline').value.trim(), pre = mkMatch(q);
+  $('#qline').classList.toggle('bad', !!pre.err);
+  $('#gre').classList.toggle('bad', !!g.err);
+  if(pre.err){ $('#tplhint').textContent = '검색 정규식 오류: ' + pre.err; $('#qline').focus(); return; }
+  if(g.err){ $('#tplhint').textContent = '그룹 정규식 오류: ' + g.err; $('#gre').focus(); return; }
+  const map = new Map();
+  let i = 0, sel = 0, hit = 0;
+  function step(){
+    const t0 = performance.now();
+    while(i < L.n && performance.now() - t0 < 70){
+      const lim = Math.min(L.n, i + 8000);
+      for(; i < lim; i++){
+        const m = msgOf(i);
+        if(pre.fn && !pre.fn(m)) continue;             // 검색에 안 걸리는 줄은 아예 세지 않는다
+        sel++;
+        const key = g.re ? greKey(g.re, m) : normalize(m);
+        if(key === null) continue;                     // 그룹 정규식과 안 맞는 줄도 뺀다
+        hit++;
+        let e = map.get(key);
+        if(e === undefined){ map.set(key, e = {t:key, n:0, lv:L.level[i], lg:pool[L.logger[i]], first:i}); }
+        e.n++;
+        if(L.level[i] > e.lv) e.lv = L.level[i];
+      }
+    }
+    btn.textContent = '집계 중… ' + Math.round(i/L.n*100) + '%';
+    if(i < L.n) setTimeout(step, 0);
+    else {
+      TPL = [...map.values()].sort((a,b) => b.n - a.n);
+      TPL.q = q; TPL.gre = g.src;                      // 문서와 함께 보관되도록 배열에 붙여 둔다
+      TPL.sel = sel; TPL.hit = hit; TPL.tot = L.n;
+      btn.textContent = '다시 집계'; done();
+    }
+  }
+  step();
+}
+function renderTpl(){
+  if(!TPL){
+    $('#tpltbl').innerHTML = '<tr><td style="padding:40px;color:var(--ink-3)">위의 “템플릿 집계 실행” 버튼을 눌러주세요. (약 10초)</td></tr>';
+    $('#tplhint').textContent = TPLHINT0; return;
+  }
+  if(!TPL.length){
+    let why;
+    if(TPL.q && !TPL.sel) why = '검색 <code>' + esc(TPL.q) + '</code> 에 걸리는 줄이 없습니다.';
+    else if(TPL.gre && TPL.q)
+      why = '검색에 걸린 ' + nf(TPL.sel) + '줄 중 그룹 정규식 <code>' + esc(TPL.gre) + '</code> 과 맞는 줄이 없습니다.' +
+            '<div style="margin-top:9px;font-size:12px;line-height:1.6">집계는 <b>줄 단위</b>로 이뤄집니다 — ' +
+            '검색어와 정규식이 서로 다른 줄에 있는 값은 아닌지 확인하세요.<br>' +
+            '(예: <code>IO file not found from</code> 은 WARN 줄에, <code>maildir/…</code> 경로는 그 다음 예외 줄에 있습니다)</div>';
+    else if(TPL.gre) why = '그룹 정규식 <code>' + esc(TPL.gre) + '</code> 과 맞는 줄이 없습니다.';
+    else why = '집계 결과가 없습니다.';
+    $('#tpltbl').innerHTML = '<tr><td style="padding:40px;color:var(--ink-3)">' + why + '</td></tr>';
+    $('#tplhint').textContent = '0개 · 전체 ' + nf(TPL.tot) + '줄';
+    $('#c-tpl').textContent = '0'; return;
+  }
+  let rows = TPL;
+  const k = tplSort.k, d = tplSort.dir;
+  rows = rows.slice().sort((a,b) => (k === 'n' ? a.n - b.n : k === 'lv' ? a.lv - b.lv : a.lg < b.lg ? -1 : 1) * d);
+  const max = TPL[0].n, tot = TPL.hit || 1;
+  let out = '<thead><tr><th data-k="n">건수</th><th data-k="n">비율</th><th data-k="lv">레벨</th>' +
+            '<th data-k="lg">로거</th><th>' + (TPL.gre ? '그룹 키' : '정규화된 메시지') + '</th></tr></thead><tbody>';
+  for(const r of rows.slice(0, 800)){
+    const pc = r.n / tot * 100;
+    out += '<tr data-i="' + r.first + '"><td class="n">' + nf(r.n) + '</td>' +
+      '<td class="n" style="width:110px">' + pc.toFixed(2) + '%' +
+        '<div class="bar" style="width:' + Math.max(2, r.n/max*70) + 'px;background:var(--series-1)"></div></td>' +
+      '<td><span class="lvlpill lv-' + r.lv + '">' + LVNAME[r.lv] + '</span></td>' +
+      '<td style="color:var(--ink-2);white-space:nowrap">' + esc(r.lg) + '</td>' +
+      '<td class="tpl">' + esc(r.t.slice(0, 260)) + '</td></tr>';
+  }
+  $('#tpltbl').innerHTML = out + '</tbody>';
+  const seg = [nf(rows.length) + (TPL.gre ? '개 그룹' : '개 템플릿')];
+  if(TPL.q) seg.push('검색 ' + nf(TPL.sel) + '줄');
+  seg.push('집계 ' + nf(TPL.hit) + '줄', '전체 ' + nf(TPL.tot) + '줄');
+  if(!TPL.gre) seg.push('상위 10개 ' + (TPL.slice(0,10).reduce((a,b) => a + b.n, 0) / tot * 100).toFixed(1) + '%');
+  $('#tplhint').textContent = seg.join(' · ');
+  $('#c-tpl').textContent = nf(TPL.length);
+}
+
+/* ============================================================
+   6. 에러·경고
+   ============================================================ */
+let ERRS = [], errFilter = new Set();
+function buildErrs(){
+  const map = new Map();
+  for(let i=0;i<L.n;i++){
+    if(L.level[i] < 3 || L.kind[i] === KIND.RAW) continue;   // 이어지는 스택트레이스는 원본 줄에 귀속
+    const key = normalize(msgOf(i));
+    let e = map.get(key);
+    if(e === undefined) map.set(key, e = {t:key, lv:L.level[i], lg:pool[L.logger[i]], n:0, idx:[]});
+    e.n++; if(e.idx.length < 200) e.idx.push(i);
+    if(L.level[i] > e.lv) e.lv = L.level[i];
+  }
+  ERRS = [...map.values()].sort((a,b) => b.n - a.n);
+}
+/* 요약 줄은 탭을 전환할 때도 다시 그린다 */
+function renderErrHead(){
+  const tot = ERRS.reduce((a,b) => a + b.n, 0);
+  const failed = TRACES.reduce((a,t) => a + (t.sev >= 2 ? 1 : 0), 0);   // 실패로 끝난 트레이스도 이슈로 취급
+  $('#c-err').textContent = nf(tot);
+  $('#errhint').textContent = 'WARN/ERROR ' + nf(tot) + '줄 · ' +
+                              ERRS.length + '종 · 문제 트레이스 ' + nf(failed) + '건';
+}
+function renderErr(){
+  const hit = search('#qerr');
+  const rows = ERRS.filter(r => (!errFilter.size || errFilter.has(r.lg)) && (!hit || hit(r.t)));
+  let out = '<thead><tr><th style="width:70px">건수</th><th style="width:60px">레벨</th>' +
+            '<th style="width:180px">로거</th><th>메시지 유형 / 최근 발생</th></tr></thead><tbody>';
+  for(const r of rows){
+    out += '<tr><td class="n">' + nf(r.n) + '</td>' +
+      '<td><span class="lvlpill lv-' + r.lv + '">' + LVNAME[r.lv] + '</span></td>' +
+      '<td style="color:var(--ink-2)">' + esc(r.lg) + '</td>' +
+      '<td><div class="tpl" style="margin-bottom:3px">' + esc(r.t.slice(0,240)) + '</div>' +
+        '<div style="font-size:11.5px;color:var(--ink-3)">' +
+        r.idx.slice(0,4).map(i => '<a href="#" data-i="' + i + '" style="color:var(--accent);text-decoration:none;margin-right:12px">' +
+          hhmmss(L.ts[i]) + ' ↗</a>').join('') +
+        (r.n > 4 ? '외 ' + nf(r.n - 4) + '건' : '') + '</div></td></tr>';
+  }
+  $('#errtbl').innerHTML = out + '</tbody>';
+}
+function buildErrChips(){
+  const cnt = {};
+  for(const r of ERRS) cnt[r.lg] = (cnt[r.lg]||0) + r.n;
+  const el = $('#errchips'); el.innerHTML = '';
+  for(const [k,v] of Object.entries(cnt).sort((a,b) => b[1]-a[1])){
+    const b = document.createElement('button');
+    b.className = 'chip'; b.dataset.g = k;
+    b.classList.toggle('on', errFilter.has(k));
+    b.innerHTML = esc(k.replace('james.','')) + ' <b>' + nf(v) + '</b>';
+    el.appendChild(b);
+  }
+  el.onclick = e => {
+    const b = e.target.closest('.chip'); if(!b) return;
+    const g = b.dataset.g;
+    errFilter.has(g) ? errFilter.delete(g) : errFilter.add(g);
+    b.classList.toggle('on', errFilter.has(g));
+    renderErr();
+  };
+}
+
+/* ============================================================
+   7. 현황 / 지표
+   ============================================================ */
+const BUCKET = 5 * 60 * 1000;   // 5분
+let METRICS = null;
+
+function buildMetrics(){
+  let lo = Infinity, hi = -Infinity;
+  for(const t of TRACES){ if(t.t0 < lo) lo = t.t0; if(t.t1 > hi) hi = t.t1; }
+  const b0 = Math.floor(lo / BUCKET) * BUCKET, nb = Math.max(1, Math.ceil((hi - b0) / BUCKET) + 1);
+  const mk = () => new Float64Array(nb);
+  const series = { mail:mk(), smtp:mk(), imap:mk(), pop3:mk() };
+  for(const t of TRACES){
+    const s = series[t.type === 'mail' ? 'mail' : t.type];
+    if(s) s[Math.min(nb-1, Math.floor((t.t0 - b0) / BUCKET))]++;
+  }
+  const x = Array.from({length:nb}, (_, i) => b0 + i * BUCKET);
+
+  const gc = [], heap = [], thr = [];
+  for(const t of TRACES){
+    if(t.type === 'gc' && t.s.gcMs) gc.push({x:t.t0, y:t.s.gcMs, k:t.s.gcKind});
+    if(t.type === 'hz' && t.s.heapPct){ heap.push({x:t.t0, y:t.s.heapPct}); thr.push({x:t.t0, y:t.s.threads}); }
+  }
+  gc.sort((a,b)=>a.x-b.x); heap.sort((a,b)=>a.x-b.x); thr.sort((a,b)=>a.x-b.x);
+
+  let lvl = [0,0,0,0,0];
+  for(let i=0;i<L.n;i++) if(L.kind[i] !== KIND.RAW) lvl[L.level[i]]++;
+  let raw = 0; for(let i=0;i<L.n;i++) if(L.kind[i] === KIND.RAW) raw++;
+  METRICS = { x, series, gc, heap, thr, lo:b0, hi:b0 + nb*BUCKET, lvl, raw,
+              mails:TRACES.filter(t=>t.type==='mail').length };
+}
+
+function renderMetrics(){
+  if(!METRICS) buildMetrics();
+  const M = METRICS, sum = a => a.reduce((p,c)=>p+c,0);
+  const maxGc = M.gc.length ? Math.max(...M.gc.map(d=>d.y)) : 0;
+  const maxHeap = M.heap.length ? Math.max(...M.heap.map(d=>d.y)) : 0;
+  const tiles = [
+    ['전체 로그 줄',  nf(L.n),                    LVNAME.map((n,i)=>M.lvl[i]?n+' '+nf(M.lvl[i]):'').filter(Boolean).join(' · ') + (M.raw?' · 스택트레이스 '+nf(M.raw):'')],
+    ['트레이스',      nf(TRACES.length),          '세션·메일·GC 단위로 묶은 처리 건수'],
+    ['처리한 메일',   nf(M.mails),                'SMTP 수신 → 배달 완결'],
+    ['경고·에러',     nf(M.lvl[3] + M.lvl[4]),    M.lvl[4] ? 'ERROR ' + nf(M.lvl[4]) + '건 포함' : 'ERROR 없음'],
+    ['최대 GC pause', maxGc ? maxGc.toFixed(1) + 'ms' : '—', M.gc.length + '회 측정'],
+    ['최대 힙 사용률',maxHeap ? maxHeap.toFixed(1) + '%' : '—', M.thr.length ? '최대 스레드 ' + nf(Math.max(...M.thr.map(d=>d.y))) : '']
+  ];
+  $('#tiles').innerHTML = tiles.map(t =>
+    '<div class="tile"><div class="lab">' + t[0] + '</div><div class="val">' + t[1] + '</div>' +
+    '<div class="sub">' + esc(t[2]) + '</div></div>').join('');
+
+  $('#charts').innerHTML = ['c1','c2','c3','c4'].map(id =>
+    '<div class="card" id="card-' + id + '"></div>').join('');
+
+  // --- 차트 1: 처리량 (4계열 선그래프) ---
+  const S = [
+    {name:'메일 배달', color:cssv('--series-1'), pts:M.x.map((x,i)=>({x, y:M.series.mail[i]}))},
+    {name:'SMTP 세션', color:cssv('--series-2'), pts:M.x.map((x,i)=>({x, y:M.series.smtp[i]}))},
+    {name:'IMAP 접속', color:cssv('--series-3'), pts:M.x.map((x,i)=>({x, y:M.series.imap[i]}))},
+    {name:'POP3 접속', color:cssv('--series-4'), pts:M.x.map((x,i)=>({x, y:M.series.pop3[i]}))}
+  ].filter(s => sum(s.pts.map(p=>p.y)) > 0);
+  mkChart('card-c1', '5분당 처리 건수', '시간대별 부하. 계열별 마지막 값에 직접 라벨을 붙였습니다.',
+          S, {type:'line', yFmt:v=>nf(Math.round(v)), unit:'건'});
+
+  mkChart('card-c2', 'GC Pause 시간', 'Stop-the-world 일시정지 (ms). 점 하나가 GC 1회.',
+          [{name:'pause', color:cssv('--series-7'), pts:M.gc.map(d=>({x:d.x, y:d.y, k:d.k}))}],
+          {type:'dot', yFmt:v=>v.toFixed(0)+'ms', unit:'ms'});
+
+  mkChart('card-c3', '힙 사용률', 'Hazelcast HealthMonitor의 heap.memory.used/max.',
+          [{name:'heap', color:cssv('--series-8'), pts:M.heap}],
+          {type:'line', yFmt:v=>v.toFixed(1)+'%', unit:'%', y0:0, y1:100});
+
+  mkChart('card-c4', '스레드 수', 'thread.count 추이. 계속 우상향하면 누수 의심.',
+          [{name:'threads', color:cssv('--series-6'), pts:M.thr}],
+          {type:'line', yFmt:v=>nf(Math.round(v)), unit:'개'});
+}
+
+function mkChart(cardId, title, cap, series, opt){
+  const card = document.getElementById(cardId);
+  const multi = series.length > 1;
+  card.innerHTML = '<h4>' + title + '</h4><div class="cap">' + cap + '</div>' +
+    '<div class="cbox"><canvas></canvas><div class="tip"></div></div>' +
+    (multi ? '<div class="legend">' + series.map(s =>
+        '<span><i style="background:' + s.color + '"></i>' + s.name + '</span>').join('') + '</div>'
+           : '<div style="height:6px"></div>');
+  const cv = card.querySelector('canvas'), tip = card.querySelector('.tip');
+  const draw = () => drawChart(cv, series, opt, multi);
+  draw();
+  new ResizeObserver(draw).observe(card);
+  hookHover(cv, tip, series, opt, multi);
+}
+
+const PAD = {l:52, r:multiPadR(), t:8, b:22};
+function multiPadR(){ return 76; }
+
+function chartGeom(cv){
+  const w = cv.clientWidth, h = 168;
+  const dpr = devicePixelRatio || 1;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  cv.style.height = h + 'px';
+  const g = cv.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0);
+  return {g, w, h, x0:PAD.l, x1:w - PAD.r, y0:PAD.t, y1:h - PAD.b};
+}
+function domain(series, opt){
+  let xa=Infinity, xb=-Infinity, ya=opt.y0 ?? 0, yb=opt.y1 ?? -Infinity;
+  for(const s of series) for(const p of s.pts){
+    if(p.x < xa) xa = p.x; if(p.x > xb) xb = p.x;
+    if(opt.y1 === undefined && p.y > yb) yb = p.y;
+  }
+  if(!isFinite(xa)){ xa = 0; xb = 1; }
+  if(yb <= ya) yb = ya + 1;
+  yb = niceTop(yb);
+  return {xa, xb, ya, yb};
+}
+function niceTop(v){
+  const e = Math.pow(10, Math.floor(Math.log10(v))), m = v / e;
+  return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * e;
+}
+
+function drawChart(cv, series, opt, multi){
+  const {g, w, h, x0, x1, y0, y1} = chartGeom(cv);
+  const d = domain(series, opt);
+  cv._geo = {x0, x1, y0, y1, ...d};
+  const X = v => x0 + (v - d.xa) / (d.xb - d.xa || 1) * (x1 - x0);
+  const Y = v => y1 - (v - d.ya) / (d.yb - d.ya || 1) * (y1 - y0);
+  g.clearRect(0, 0, w, h);
+  g.font = '10.5px ' + cssv('--sans');
+  g.textBaseline = 'middle';
+
+  // 그리드 + y축
+  g.strokeStyle = cssv('--grid'); g.fillStyle = cssv('--ink-3'); g.lineWidth = 1;
+  for(let i = 0; i <= 4; i++){
+    const v = d.ya + (d.yb - d.ya) * i / 4, y = Math.round(Y(v)) + .5;
+    g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke();
+    g.textAlign = 'right'; g.fillText(opt.yFmt(v), x0 - 8, Y(v));
+  }
+  // x축 라벨 (3시간 간격)
+  g.textAlign = 'center';
+  const step = 3 * 3600000, t0 = Math.ceil(d.xa / step) * step;
+  for(let t = t0; t <= d.xb; t += step) g.fillText(hhmm(t), X(t), y1 + 11);
+  g.strokeStyle = cssv('--axis');
+  g.beginPath(); g.moveTo(x0, y1 + .5); g.lineTo(x1, y1 + .5); g.stroke();
+
+  // 마크
+  for(const s of series){
+    if(opt.type === 'dot'){
+      g.fillStyle = s.color;
+      for(const p of s.pts){ g.beginPath(); g.arc(X(p.x), Y(p.y), 2.6, 0, 7); g.fill(); }
+    } else {
+      g.strokeStyle = s.color; g.lineWidth = 2; g.lineJoin = 'round'; g.lineCap = 'round';
+      g.beginPath();
+      s.pts.forEach((p, i) => i ? g.lineTo(X(p.x), Y(p.y)) : g.moveTo(X(p.x), Y(p.y)));
+      g.stroke();
+    }
+  }
+  // 직접 라벨 (마지막 값)
+  g.textAlign = 'left';
+  const used = [];
+  for(const s of series){
+    const p = s.pts[s.pts.length - 1]; if(!p) continue;
+    let y = Y(p.y);
+    while(used.some(u => Math.abs(u - y) < 11)) y += 11;
+    used.push(y);
+    g.fillStyle = s.color;
+    g.fillText(multi ? s.name : opt.yFmt(p.y), Math.min(x1 + 6, w - PAD.r + 6), y);
+  }
+}
+
+function hookHover(cv, tip, series, opt, multi){
+  cv.onmousemove = e => {
+    const geo = cv._geo; if(!geo) return;
+    const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    if(mx < geo.x0 - 4 || mx > geo.x1 + 4){ tip.style.display = 'none'; drawChart(cv, series, opt, multi); return; }
+    const tv = geo.xa + (mx - geo.x0) / (geo.x1 - geo.x0) * (geo.xb - geo.xa);
+    drawChart(cv, series, opt, multi);
+    const g = cv.getContext('2d');
+    const X = v => geo.x0 + (v - geo.xa) / (geo.xb - geo.xa || 1) * (geo.x1 - geo.x0);
+    const Y = v => geo.y1 - (v - geo.ya) / (geo.yb - geo.ya || 1) * (geo.y1 - geo.y0);
+
+    let rows = [], stamp = 0;
+    if(opt.type === 'dot'){
+      let best = null, bd = 1e9;
+      for(const p of series[0].pts){
+        const dx = X(p.x) - mx, dy = Y(p.y) - my, dd = dx*dx + dy*dy;
+        if(dd < bd){ bd = dd; best = p; }
+      }
+      if(!best || bd > 900){ tip.style.display = 'none'; return; }
+      stamp = best.x;
+      rows = [{c:series[0].color, n:best.k || 'pause', v:opt.yFmt(best.y)}];
+      g.strokeStyle = cssv('--surface-1'); g.lineWidth = 2;
+      g.fillStyle = series[0].color;
+      g.beginPath(); g.arc(X(best.x), Y(best.y), 4.5, 0, 7); g.fill(); g.stroke();
+    } else {
+      const pts = series[0].pts; if(!pts.length){ tip.style.display='none'; return; }
+      let bi = 0, bd = 1e15;
+      pts.forEach((p, i) => { const dd = Math.abs(p.x - tv); if(dd < bd){ bd = dd; bi = i; } });
+      stamp = pts[bi].x;
+      g.strokeStyle = cssv('--axis'); g.lineWidth = 1;
+      g.beginPath(); g.moveTo(Math.round(X(stamp)) + .5, geo.y0); g.lineTo(Math.round(X(stamp)) + .5, geo.y1); g.stroke();
+      for(const s of series){
+        const p = s.pts[bi]; if(!p) continue;
+        rows.push({c:s.color, n:s.name, v:opt.yFmt(p.y)});
+        g.fillStyle = s.color; g.strokeStyle = cssv('--surface-1'); g.lineWidth = 2;
+        g.beginPath(); g.arc(X(p.x), Y(p.y), 4, 0, 7); g.fill(); g.stroke();
+      }
+    }
+    tip.innerHTML = '<b>' + hhmm(stamp) + '</b>' +
+      rows.map(r => '<div class="r"><span><i style="background:' + r.c + '"></i>' + esc(r.n) + '</span><span>' + r.v + '</span></div>').join('');
+    tip.style.display = 'block';
+    const tw = tip.offsetWidth;
+    tip.style.left = Math.min(cv.clientWidth - tw - 4, Math.max(0, mx + 14)) + 'px';
+    tip.style.top  = Math.max(0, my - 10) + 'px';
+  };
+  cv.onmouseleave = () => { tip.style.display = 'none'; drawChart(cv, series, opt, multi); };
+}
+
+/* ============================================================
+   8. 파일 탭 — 여러 로그를 동시에 열어 둔다
+   ------------------------------------------------------------
+   문서 하나가 파싱 결과와 화면 상태를 통째로 들고 있고,
+   탭을 바꿀 때 전역 변수와 맞바꾼다 (snapshot / restore).
+   ============================================================ */
+const DOCS = [];
+let ACTIVE = null, docSeq = 0, LOADING = false;
+let remoteReload = null;      // SFTP 모듈이 채워 넣는다 (원격 탭 다시읽기)
+
+function blankDoc(name, size, label){
+  return {
+    id: ++docSeq, name: name, size: size || 0, label: label || name,
+    info: '', ready: false, src: null,        // src: 다시읽기용 원본 {kind:'file'|'sftp', …}
+    TEXT: '', L: blankL(), pool: [], poolMap: new Map(), TRACES: [],
+    ERRS: [], TPL: null, METRICS: null,
+    filtered: [], selected: -1, typeFilter: new Set(), errFilter: new Set(),
+    showNoise: false, tplSort: {k:'n', dir:-1},
+    q: '', sort: 't', qline: '', gre: '', qerr: '', listTop: 0, detailTop: 0, view: 'trace'
+  };
+}
+/* 전역 → 문서 */
+function snapshot(d){
+  d.TEXT = TEXT; d.L = L; d.pool = pool; d.poolMap = poolMap; d.TRACES = TRACES;
+  d.ERRS = ERRS; d.TPL = TPL; d.METRICS = METRICS;
+  d.filtered = filtered; d.selected = selected;
+  d.typeFilter = typeFilter; d.errFilter = errFilter;
+  d.showNoise = showNoise; d.tplSort = tplSort;
+  d.q = $('#q').value; d.sort = $('#sort').value;
+  d.qline = $('#qline').value; d.gre = $('#gre').value;
+  d.qerr = $('#qerr').value;
+  d.listTop = $('#list').scrollTop; d.detailTop = $('#detail').scrollTop;
+  const on = $('#tabs button.on'); if(on) d.view = on.dataset.v;
+}
+/* 문서 → 전역 */
+function restore(d){
+  TEXT = d.TEXT; L = d.L; pool = d.pool; poolMap = d.poolMap; TRACES = d.TRACES;
+  ERRS = d.ERRS; TPL = d.TPL; METRICS = d.METRICS;
+  filtered = d.filtered; selected = d.selected;
+  typeFilter = d.typeFilter; errFilter = d.errFilter;
+  showNoise = d.showNoise; tplSort = d.tplSort;
+  $('#q').value = d.q; $('#sort').value = d.sort;
+  $('#qline').value = d.qline || ''; $('#gre').value = d.gre || '';
+  $('#qerr').value = d.qerr;
+}
+const docById = id => DOCS.find(d => d.id === id);
+
+function renderFileTabs(){
+  const el = $('#ftabs');
+  el.classList.toggle('hidden', DOCS.length === 0);
+  el.innerHTML = DOCS.map(d =>
+    '<button class="ftab' + (d === ACTIVE ? ' on' : '') + '" data-id="' + d.id +
+      '" title="' + esc(d.label) + '">' +
+      '<span class="nm">' + esc(d.name) + '</span>' +
+      '<span class="sub">' + (d.ready ? bytes(d.size) : '…') + '</span>' +
+      '<span class="x" data-close="' + d.id + '" title="닫기">✕</span></button>').join('') +
+    (DOCS.length ? '<button class="fadd" id="ftabadd" title="파일 열기">＋</button>' : '');
+}
+
+/* 화면 요소 비우기 (탭 전환·닫기 공통) */
+function resetPanes(){
+  $('#q').value = ''; $('#sort').value = 't'; $('#qerr').value = '';
+  $('#qline').value = ''; $('#gre').value = ''; $('#tplhint').textContent = TPLHINT0;
+  ['#qline','#gre','#q','#qerr'].forEach(i => $(i).classList.remove('bad'));
+  $('#typechips').innerHTML = ''; $('#errchips').innerHTML = '';
+  $('#tpltbl').innerHTML = ''; $('#errtbl').innerHTML = '';
+  $('#listInner').innerHTML = ''; $('#listInner').style.height = '0px';
+  $('#list').scrollTop = 0;
+  $('#btntpl').textContent = '템플릿 집계 실행';
+  $('#c-trace').textContent = ''; $('#c-tpl').textContent = ''; $('#c-err').textContent = '';
+  $('#listcnt').textContent = ''; $('#errhint').textContent = '';
+  $('#detail').innerHTML = '<div class="empty">왼쪽에서 트레이스를 선택하세요</div>';
+}
+
+/* 파싱이 끝난 문서를 화면에 올린다 */
+function mountDoc(d){
+  $('#fileinfo').textContent = d.info;
+  $('#drop').style.display = 'none';
+  $('#prog').style.display = 'none';
+  $('#progtxt').textContent = '';
+  $('#tabs').classList.remove('hidden');
+  buildChips(); buildErrChips(); renderErrHead(); renderErr();
+  $('#c-trace').textContent = nf(TRACES.length);
+  $('#c-tpl').textContent = TPL ? nf(TPL.length) : '';
+  $('#btntpl').textContent = TPL ? '다시 집계' : '템플릿 집계 실행';
+  $('#listcnt').textContent = nf(filtered.length) + ' / ' + nf(TRACES.length);
+  $('#listInner').style.height = (filtered.length * ROW_H) + 'px';
+  $('#list').scrollTop = d.listTop;
+  show(d.view);
+  if(selected && selected.lines){ showDetail(selected); $('#detail').scrollTop = d.detailTop; }
+  else $('#detail').innerHTML = '<div class="empty">왼쪽에서 트레이스를 선택하세요</div>';
+}
+
+function activate(d){
+  if(!d || d === ACTIVE || LOADING) return;
+  if(ACTIVE) snapshot(ACTIVE);
+  ACTIVE = d; restore(d);
+  renderFileTabs();
+  mountDoc(d);
+}
+
+/* 열린 파일이 하나도 없는 처음 화면 */
+function showEmpty(){
+  ACTIVE = null;
+  TEXT = ''; L = blankL(); pool = []; poolMap = new Map(); TRACES = [];
+  ERRS = []; TPL = null; METRICS = null;
+  filtered = []; selected = -1; showNoise = false;
+  typeFilter = new Set(); errFilter = new Set();
+  resetPanes(); renderFileTabs();
+  $('#fileinfo').textContent = '파일을 열어주세요';
+  $('#tabs').classList.add('hidden');
+  $$('main').forEach(m => m.classList.remove('on'));
+  $('#drop').style.display = '';
+  $('#prog').style.display = 'none';
+  $('#progtxt').textContent = '';
+}
+
+function closeDoc(id){
+  if(LOADING) return;
+  const i = DOCS.findIndex(d => d.id === id); if(i < 0) return;
+  const d = DOCS[i], wasActive = (d === ACTIVE);
+  DOCS.splice(i, 1);
+  d.TEXT = ''; d.L = blankL(); d.pool = []; d.poolMap = new Map();     // 메모리 회수
+  d.TRACES = []; d.ERRS = []; d.TPL = null; d.METRICS = null;
+  d.filtered = []; d.selected = -1;
+  if(!wasActive) return renderFileTabs();
+  ACTIVE = null;
+  const nx = DOCS[i] || DOCS[i-1] || null;
+  if(nx){ ACTIVE = nx; restore(nx); renderFileTabs(); mountDoc(nx); }
+  else showEmpty();
+}
+
+/* ---- 새 파일 열기 ---- */
+/* 로딩 화면 */
+function beginLoad(msg){
+  $('#drop').style.display = '';
+  $('#tabs').classList.add('hidden');
+  $$('main').forEach(m => m.classList.remove('on'));
+  $('#prog').style.display = 'block';
+  $('#prog i').style.width = '0%';
+  $('#progtxt').textContent = msg;
+}
+/* 새 탭을 만들고 로딩 화면을 띄운다 (이미 열린 탭은 그대로 둔다) */
+function startDoc(name, size, label, what){
+  if(ACTIVE) snapshot(ACTIVE);
+  const d = blankDoc(name, size, label);
+  DOCS.push(d); ACTIVE = d;
+  restore(d); resetPanes(); renderFileTabs();
+  LOADING = true;
+  beginLoad(what);
+  $('#fileinfo').textContent = d.label + (d.size ? ' · ' + bytes(d.size) : '');
+  return d;
+}
+/* 탭 자리·이름·화면 상태는 그대로 두고 내용만 비운다 (다시읽기) */
+function restartDoc(d, what){
+  const b = blankDoc(d.name, d.size, d.label);
+  b.id = d.id; b.src = d.src;                                  // 탭 정체성 유지
+  b.q = d.q; b.sort = d.sort; b.qline = d.qline; b.gre = d.gre;
+  b.qerr = d.qerr; b.view = d.view;
+  const i = DOCS.indexOf(d);
+  if(i >= 0) DOCS[i] = b; else DOCS.push(b);
+  d.TEXT = ''; d.L = blankL(); d.pool = []; d.poolMap = new Map();     // 메모리 회수
+  d.TRACES = []; d.ERRS = []; d.TPL = null; d.METRICS = null;
+  d.filtered = []; d.selected = -1;
+  ACTIVE = b;
+  resetPanes(); restore(b); renderFileTabs();
+  LOADING = true;
+  beginLoad(what);
+  $('#fileinfo').textContent = b.label + (b.size ? ' · ' + bytes(b.size) : '');
+  return b;
+}
+
+/* 실패하면 새로 만든 탭을 없애고 직전 문서로 돌아간다 */
+function abortDoc(d, why){
+  LOADING = false;
+  const i = DOCS.indexOf(d);
+  if(i >= 0) DOCS.splice(i, 1);
+  ACTIVE = null;
+  const nx = DOCS[i] || DOCS[i-1] || null;
+  if(nx){ ACTIVE = nx; restore(nx); renderFileTabs(); mountDoc(nx); }
+  else showEmpty();
+  $('#fileinfo').textContent = why;
+}
+
+/* 텍스트 → 파싱 → 화면 구성 (로컬 파일 / SFTP 공통) */
+async function parseInto(d, text){
+  const t0 = performance.now();
+  try{
+    await parseAll(text, (r, i) => {
+      $('#prog i').style.width = (r * 100) + '%';
+      $('#progtxt').textContent = '파싱 ' + nf(i) + '줄 (' + Math.round(r*100) + '%)';
+    });
+  }catch(e){
+    abortDoc(d, '분석 실패: ' + ((e && e.message) || e));
+    return;
+  }
+  const el = ((performance.now() - t0) / 1000).toFixed(1);
+  d.info = d.label + ' · ' + bytes(d.size) + ' · ' + nf(L.n) + '줄 → ' +
+           nf(TRACES.length) + '트레이스 · ' + el + '초';
+  d.ready = true;
+  LOADING = false;
+  buildErrs();
+  renderFileTabs();
+  mountDoc(d);
+  applyFilter();
+}
+
+async function load(file){
+  if(LOADING) return;
+  const d = startDoc(file.name, file.size, file.name, '파일 읽는 중…');
+  d.src = { kind:'file', file: file };
+  let text;
+  try{ text = await file.text(); }
+  catch(e){ return abortDoc(d, '파일을 읽지 못했습니다: ' + ((e && e.message) || e)); }
+  await parseInto(d, text);
+}
+/* 여러 개를 받으면 차례대로 탭을 연다 */
+async function loadMany(files){
+  for(const f of files) await load(f);
+}
+
+function show(v){
+  $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  $$('main').forEach(m => m.classList.toggle('on', m.id === 'v-' + v));
+  if(v === 'tl') renderMetrics();
+  if(v === 'tpl') renderTpl();
+  if(v === 'trace'){ restoreListW(); renderList(); }
+}
+
+/* 파일 입력 */
+$('#btnopen').onclick = () => $('#fileinput').click();
+$('#fileinput').onchange = e => {
+  const list = [...e.target.files];
+  e.target.value = '';                                  // 같은 파일도 다시 열 수 있게
+  if(list.length) loadMany(list);
+};
+document.addEventListener('dragover', e => { e.preventDefault(); $('#drop').classList.add('hot'); });
+document.addEventListener('dragleave', () => $('#drop').classList.remove('hot'));
+document.addEventListener('drop', e => {
+  e.preventDefault(); $('#drop').classList.remove('hot');
+  const list = [...e.dataTransfer.files];
+  if(list.length) loadMany(list);
+});
+
+/* 파일 탭 조작 */
+$('#ftabs').onclick = e => {
+  const x = e.target.closest('[data-close]');
+  if(x) return closeDoc(+x.dataset.close);
+  if(e.target.closest('#ftabadd')) return $('#fileinput').click();
+  const b = e.target.closest('.ftab');
+  if(b) activate(docById(+b.dataset.id));
+};
+$('#ftabs').onauxclick = e => {                      // 가운데 버튼으로 닫기
+  const b = e.target.closest('.ftab');
+  if(e.button === 1 && b){ e.preventDefault(); closeDoc(+b.dataset.id); }
+};
+document.addEventListener('keydown', e => {          // Ctrl+Tab / Ctrl+1~9 로 탭 이동
+  if(!e.ctrlKey || DOCS.length < 2 || $('#ftpmask').classList.contains('on')) return;
+  if(e.key === 'Tab'){
+    e.preventDefault();
+    const n = DOCS.length, i = DOCS.indexOf(ACTIVE);
+    activate(DOCS[((i + (e.shiftKey ? -1 : 1)) % n + n) % n]);
+  }else if(e.key >= '1' && e.key <= '9'){
+    const d = DOCS[+e.key - 1];
+    if(d){ e.preventDefault(); activate(d); }
+  }
+});
+
+/* 분석 탭 (트레이스 · 집계 · 에러 · 현황) */
+$('#tabs').onclick = e => { const b = e.target.closest('button'); if(b && b.dataset.v) show(b.dataset.v); };
+
+/* ---- 다시읽기 ---- */
+let rmT;
+function reloadMsg(t, err){
+  const el = $('#reloadmsg');
+  el.textContent = t || ''; el.classList.toggle('err', !!err);
+  clearTimeout(rmT);
+  if(t) rmT = setTimeout(() => { el.textContent = ''; el.classList.remove('err'); }, 7000);
+}
+
+async function reloadActive(){
+  if(LOADING) return reloadMsg('다른 파일을 읽는 중입니다', true);
+  const d = ACTIVE; if(!d) return;
+  snapshot(d);                                  // 현재 검색어·보던 탭을 넘겨받는다
+  reloadMsg('');
+  const s = d.src;
+
+  if(s && s.kind === 'sftp'){                   // 원격 파일은 SFTP 모듈에 맡긴다
+    if(!remoteReload) return reloadMsg('SFTP 기능을 쓸 수 없습니다', true);
+    return remoteReload(d);
+  }
+  if(!s || !s.file) return reloadMsg('다시 읽을 원본을 알 수 없습니다', true);
+
+  const b = restartDoc(d, '파일 다시 읽는 중…');
+  let text;
+  try{ text = await s.file.text(); }
+  catch(e){
+    const why = '파일을 다시 읽지 못했습니다: ' + ((e && e.message) || e);
+    abortDoc(b, why);
+    return reloadMsg(why, true);
+  }
+  await parseInto(b, text);
+  if(b.ready) reloadMsg('다시 읽었습니다 · ' + nf(L.n) + '줄');
+}
+$('#btnreload').onclick = reloadActive;
+
+/* 트레이스 뷰 */
+$('#list').onscroll = renderList;
+$('#list').onclick = e => { const r = e.target.closest('.row'); if(r) showDetail(filtered[+r.dataset.i]); };
+let qT; $('#q').oninput = () => { clearTimeout(qT); qT = setTimeout(applyFilter, 180); };
+
+/* 리스트·상세 너비 조절 — 드래그한 값은 다음 실행에서도 그대로 쓴다 */
+const LISTW = 'lv-listw', MINL = 260, MINR = 320;
+function setListW(px){
+  const box = $('.split'), w = box.clientWidth;
+  if(!w) return;
+  $('#list').style.width = Math.max(MINL, Math.min(px, w - MINR)) + 'px';
+  renderList();
+}
+$('#vsplit').onpointerdown = e => {
+  e.preventDefault();
+  const sp = $('#vsplit'), left = $('.split').getBoundingClientRect().left;
+  sp.setPointerCapture(e.pointerId);
+  sp.classList.add('drag'); document.body.classList.add('vsplitting');
+  const move = ev => setListW(ev.clientX - left);
+  const up = () => {
+    sp.removeEventListener('pointermove', move); sp.removeEventListener('pointerup', up);
+    sp.classList.remove('drag'); document.body.classList.remove('vsplitting');
+    try{ localStorage.setItem(LISTW, parseInt($('#list').style.width, 10) || ''); }catch(_){}
+  };
+  sp.addEventListener('pointermove', move); sp.addEventListener('pointerup', up);
+};
+$('#vsplit').ondblclick = () => {
+  $('#list').style.width = '46%'; renderList();
+  try{ localStorage.removeItem(LISTW); }catch(_){}
+};
+function restoreListW(){
+  let w = 0;
+  try{ w = +localStorage.getItem(LISTW) || 0; }catch(_){}
+  if(w) setListW(w);
+}
+/* 창이 좁아지면 상세가 사라지지 않도록 다시 가둔다 */
+addEventListener('resize', () => {
+  const cur = parseInt($('#list').style.width, 10);
+  if(cur) setListW(cur);
+});
+$('#sort').onchange = applyFilter;
+
+/* 템플릿 뷰 */
+const runTpl = () => { TPL = null; buildTemplates(renderTpl); };
+$('#btntpl').onclick = runTpl;
+/* 검색·정규식은 집계 방식 자체를 바꾸므로, 바뀌면 집계를 다시 돌려야 한다 */
+const tplDirty = () => !!TPL && (TPL.q !== $('#qline').value.trim() || TPL.gre !== $('#gre').value.trim());
+['#qline', '#gre'].forEach(sel => {
+  $(sel).onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); runTpl(); } };
+  $(sel).oninput = () => {
+    $(sel).classList.remove('bad');
+    if(tplDirty()) $('#btntpl').textContent = '다시 집계 ↵';
+  };
+});
+
+/* 정규식 도움말 */
+const helpOn = v => $('#hmask').classList.toggle('on', v);
+$('#grehelp').onclick = () => helpOn(true);
+$('#hclose').onclick  = () => helpOn(false);
+$('#hmask').onclick = e => { if(e.target === $('#hmask')) helpOn(false); };
+$('#hex').onclick = e => {                          // 예제는 검색·정규식 두 칸을 함께 채운다
+  const tr = e.target.closest('tr.ex'); if(!tr) return;
+  $('#qline').value = tr.cells[1].textContent.trim();
+  $('#gre').value   = tr.cells[2].textContent.trim();
+  helpOn(false); $('#gre').focus();
+  if(tplDirty()) $('#btntpl').textContent = '다시 집계 ↵';
+};
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape' && $('#hmask').classList.contains('on')) helpOn(false);
+});
+$('#tpltbl').onclick = e => {
+  const th = e.target.closest('th');
+  if(th && th.dataset.k){ tplSort.dir = tplSort.k === th.dataset.k ? -tplSort.dir : -1; tplSort.k = th.dataset.k; renderTpl(); return; }
+  const tr = e.target.closest('tr[data-i]');
+  if(tr) jumpToLine(+tr.dataset.i);
+};
+
+/* 에러 뷰 */
+let qT3; $('#qerr').oninput = () => { clearTimeout(qT3); qT3 = setTimeout(renderErr, 180); };
+$('#errtbl').onclick = e => {
+  const a = e.target.closest('a[data-i]');
+  if(a){ e.preventDefault(); jumpToLine(+a.dataset.i); }
+};
+
+function jumpToLine(i){
+  const t = L.trace[i]; if(t < 0) return;
+  const tr = TRACES[t]; if(!tr) return;
+  typeFilter.clear(); $('#q').value = '';
+  $$('#typechips .chip').forEach(c => c.classList.toggle('on', c.dataset.t === '*'));
+  show('trace'); applyFilter();
+  const idx = filtered.indexOf(tr);
+  if(idx >= 0){ $('#list').scrollTop = Math.max(0, idx * ROW_H - 120); renderList(); }
+  showDetail(tr);
+}
+
+/* 테마 */
+$('#btntheme').onclick = () => {
+  const d = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.documentElement.setAttribute('data-theme', d ? 'light' : 'dark');
+  try{ localStorage.setItem('lv-theme', d ? 'light' : 'dark'); }catch(_){}
+  if($('#v-tl').classList.contains('on')) renderMetrics();
+};
+try{ const t = localStorage.getItem('lv-theme'); if(t) document.documentElement.setAttribute('data-theme', t); }catch(_){}
+
+/* ============================================================
+   9. SFTP 가져오기
+   ============================================================ */
+(function(){
+const api = window.sftp;
+if(!api){ $('#btnftp').style.display = 'none'; return; }   // 브라우저에서 연 경우
+
+let cwd = '/', sel = null, connected = false, ROWS = [];
+const PREF = 'lv-sftp-last';   // 마지막으로 쓴 연결 id
+
+const msg = (t, err) => {
+  const m = $('#ftpmsg'); m.textContent = t || ''; m.classList.toggle('err', !!err);
+};
+const clean = e => String((e && e.message) || e)
+  .replace(/^Error invoking remote method '[^']*':\s*/, '')
+  .replace(/^Error:\s*/, '');
+const isLog = n => /\.(log|txt|out)(\.[\w.-]+)?$/i.test(n);
+const stamp = ms => {
+  if(!ms) return '';
+  const d = new Date(ms);
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+         ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+};
+const join   = (a, b) => (a === '/' ? '' : a.replace(/\/+$/, '')) + '/' + b;
+const parent = p => { const i = p.replace(/\/+$/, '').lastIndexOf('/'); return i <= 0 ? '/' : p.slice(0, i); };
+
+/* ---- 대화상자 열기·닫기 ---- */
+const openDlg = () => {
+  $('#ftpmask').classList.add('on');
+  setTimeout(() => (connected ? $('#fcwd') : $('#fhost')).focus(), 0);
+};
+const closeDlg = () => $('#ftpmask').classList.remove('on');
+
+$('#btnftp').onclick  = openDlg;
+$('#fclose').onclick  = closeDlg;
+$('#ftpmask').onclick = e => { if(e.target.id === 'ftpmask') closeDlg(); };
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape' && $('#ftpmask').classList.contains('on')) closeDlg();
+});
+
+/* ---- 저장된 연결 목록 ---- */
+let SITES = [], siteId = null, siteHasPw = false;
+
+const site = id => SITES.find(s => s.id === id);
+
+function renderSites(){
+  $('#sitelist').innerHTML = SITES.length
+    ? SITES.map(s => '<li data-id="' + esc(s.id) + '"' + (s.id === siteId ? ' class="sel"' : '') + '>' +
+        '<b>' + esc(s.name) + '</b><span>' + esc(s.user + '@' + s.host) + '</span></li>').join('')
+    : '<div class="none">저장된 연결이 없습니다.<br>오른쪽에 정보를 입력하고 [저장]을 누르세요.</div>';
+  $('#sdel').disabled = !siteId;
+}
+
+async function reloadSites(keep){
+  SITES = await api.sitesList();
+  if(keep !== undefined) siteId = keep;
+  if(siteId && !site(siteId)) siteId = null;
+  renderSites();
+}
+
+/* 폼 ↔ 연결 정보 */
+function fillForm(s){
+  $('#fname').value = s ? s.name : '';
+  $('#fhost').value = s ? s.host : '';
+  $('#fport').value = s ? s.port : '22';
+  $('#fuser').value = s ? s.user : '';
+  $('#fauth').value = s ? s.auth : 'pw';
+  $('#fkey').value  = s ? (s.key || '') : '';
+  $('#fpath').value = s ? (s.path || '') : '';
+  $('#fpass').value = ''; $('#fkeypp').value = '';
+  $('#fsavepw').checked = s ? !!s.savePw : false;
+  siteHasPw = !!(s && s.hasPw);
+  const ph = siteHasPw ? '저장된 값 사용 (바꾸려면 새로 입력)' : '';
+  $('#fpass').placeholder = ph;
+  $('#fkeypp').placeholder = siteHasPw ? ph : '없으면 비워 두세요';
+  authUI();
+}
+
+const formSite = () => ({
+  id: siteId,
+  name: $('#fname').value.trim(),
+  host: $('#fhost').value.trim(),
+  port: $('#fport').value.trim() || '22',
+  user: $('#fuser').value.trim(),
+  auth: $('#fauth').value,
+  key:  $('#fkey').value.trim(),
+  path: $('#fpath').value.trim(),
+  savePw: $('#fsavepw').checked,
+  password:   $('#fpass').value,
+  passphrase: $('#fkeypp').value
+});
+
+/* 목록에서 고르면 정보를 채우고 바로 접속한다 */
+$('#sitelist').onclick = e => {
+  const li = e.target.closest('li[data-id]'); if(!li) return;
+  const s = site(li.dataset.id); if(!s) return;
+  siteId = s.id;
+  try{ localStorage.setItem(PREF, s.id); }catch(_){}
+  renderSites();
+  fillForm(s);
+  if(s.auth === 'key' || s.hasPw) connect();
+  else { msg(s.name + ' — 비밀번호를 입력하고 [접속]을 누르세요'); $('#fpass').focus(); }
+};
+
+$('#snew').onclick = () => {
+  siteId = null; renderSites(); fillForm(null);
+  msg(''); $('#fname').focus();
+};
+
+$('#sdel').onclick = async () => {
+  const s = site(siteId); if(!s) return;
+  if(!confirm('저장된 연결 "' + s.name + '" 을(를) 삭제할까요?')) return;
+  SITES = await api.sitesDelete(s.id);
+  siteId = null; renderSites(); fillForm(null);
+  msg('삭제했습니다');
+};
+
+$('#fsave').onclick = async () => {
+  const f = formSite();
+  if(!f.host || !f.user) return msg('호스트와 사용자를 입력하세요', true);
+  try{
+    const r = await api.sitesSave(f);
+    SITES = r.list; siteId = r.id; renderSites();
+    fillForm(site(siteId));
+    try{ localStorage.setItem(PREF, siteId); }catch(_){}
+    msg(f.savePw && !r.secure ? '저장했습니다 (이 PC에서는 비밀번호 암호화를 쓸 수 없어 저장하지 않았습니다)'
+                              : '저장했습니다', f.savePw && !r.secure);
+  }catch(e){ msg(clean(e), true); }
+};
+
+/* 시작할 때 목록을 읽고 마지막에 쓴 연결을 채워 둔다 */
+(async () => {
+  await reloadSites();
+  let last = null;
+  try{ last = localStorage.getItem(PREF); }catch(_){}
+  if(last && site(last)){ siteId = last; renderSites(); fillForm(site(last)); }
+})();
+
+/* ---- 인증 방식 전환 ---- */
+function authUI(){
+  const key = $('#fauth').value === 'key';
+  $$('.a-key').forEach(e => e.classList.toggle('hide', !key));
+  $$('.a-pw').forEach(e => e.classList.toggle('hide', key));
+}
+$('#fauth').onchange = authUI;
+authUI();
+$('#fkeybtn').onclick = async () => { const p = await api.pickKey(); if(p) $('#fkey').value = p; };
+
+/* ---- 접속 ---- */
+async function connect(){
+  const cfg = {
+    siteId: siteId,
+    host: $('#fhost').value.trim(),
+    port: $('#fport').value.trim() || '22',
+    user: $('#fuser').value.trim(),
+    auth: $('#fauth').value,
+    password: $('#fpass').value,
+    keyPath: $('#fkey').value.trim(),
+    passphrase: $('#fkeypp').value
+  };
+  if(!cfg.host || !cfg.user) return msg('호스트와 사용자를 입력하세요', true);
+  if(cfg.auth === 'key' && !cfg.keyPath) return msg('개인키 파일을 선택하세요', true);
+
+  $('#fgo').disabled = true;
+  msg('접속 중…');
+  try{
+    const r = await api.connect(cfg);
+    connected = true;
+    $('#ftpwho').textContent = cfg.user + '@' + cfg.host;
+    $('#ftpconn').classList.add('hide');
+    $('#ftpbrowse').classList.remove('hide');
+    $('#fdisc').classList.remove('hide');
+    $('#fgo').textContent = '열기';
+    await list($('#fpath').value.trim() || r.home);
+    if(siteId) api.sitesPath(siteId, cwd).catch(() => {});
+  }catch(e){
+    msg('접속 실패: ' + clean(e), true);
+  }finally{
+    $('#fgo').disabled = false;
+  }
+}
+
+/* ---- 연결 해제 ---- */
+async function disconnect(){
+  try{ await api.disconnect(); }catch(_){}
+  connected = false; sel = null; ROWS = [];
+  $('#ftpwho').textContent = '';
+  $('#ftpbrowse').classList.add('hide');
+  $('#ftpconn').classList.remove('hide');
+  $('#fdisc').classList.add('hide');
+  $('#fgo').textContent = '접속';
+  $('#ftplist').innerHTML = '';
+  await reloadSites(siteId);
+  if(siteId) fillForm(site(siteId));
+  msg('연결을 해제했습니다');
+}
+
+/* ---- 디렉터리 목록 ---- */
+async function list(dir){
+  msg('목록을 읽는 중…');
+  try{
+    const r = await api.list(dir);
+    cwd = r.cwd; sel = null;
+    $('#fcwd').value = cwd;
+    ROWS = r.items.sort((a, b) =>
+      a.dir !== b.dir ? (a.dir ? -1 : 1) : a.name.localeCompare(b.name, 'ko'));
+    $('#ftplist').innerHTML = '<table><tbody>' + ROWS.map((f, i) =>
+      '<tr data-i="' + i + '">' +
+        '<td class="ic">' + (f.dir ? '▸' : f.link ? '↳' : '·') + '</td>' +
+        '<td class="' + (f.dir ? 'd' : isLog(f.name) ? 'log' : '') + '">' + esc(f.name) + '</td>' +
+        '<td class="sz">' + (f.dir ? '' : bytes(f.size)) + '</td>' +
+        '<td class="dt">' + stamp(f.mtime) + '</td></tr>').join('') + '</tbody></table>';
+    $('#ftplist').scrollTop = 0;
+    msg(ROWS.length ? nf(ROWS.length) + '개 항목 · 폴더는 클릭, 파일은 더블클릭하면 열립니다'
+                    : '빈 디렉터리입니다');
+  }catch(e){
+    msg(clean(e), true);
+  }
+}
+
+$('#ftplist').onclick = e => {
+  const tr = e.target.closest('tr'); if(!tr) return;
+  const f = ROWS[+tr.dataset.i]; if(!f) return;
+  if(f.dir) return list(join(cwd, f.name));
+  $$('#ftplist tr').forEach(r => r.classList.remove('sel'));
+  tr.classList.add('sel');
+  sel = f;
+  msg(f.name + ' · ' + bytes(f.size));
+};
+$('#ftplist').ondblclick = e => {
+  const tr = e.target.closest('tr'); if(!tr) return;
+  const f = ROWS[+tr.dataset.i];
+  if(f && !f.dir) openRemote(f);
+};
+
+$('#fup').onclick      = () => list(parent(cwd));
+$('#frefresh').onclick = () => list(cwd);
+$('#fgocwd').onclick   = () => list($('#fcwd').value.trim() || '/');
+$('#fcwd').onkeydown   = e => { if(e.key === 'Enter') list($('#fcwd').value.trim() || '/'); };
+$('#fdisc').onclick    = disconnect;
+$('#fgo').onclick      = () => connected ? (sel ? openRemote(sel) : msg('파일을 선택하세요', true))
+                                         : connect();
+$$('#ftpconn input').forEach(i => i.onkeydown = e => { if(e.key === 'Enter') connect(); });
+
+/* ---- 원격 파일 → 기존 로그 분석 ---- */
+async function openRemote(f){
+  if(LOADING) return msg('다른 파일을 여는 중입니다', true);
+  const p = join(cwd, f.name);
+  closeDlg();
+  const d = startDoc(f.name, f.size, $('#ftpwho').textContent + ':' + p, '다운로드 중…');
+  d.src = { kind:'sftp', path: p };
+  let r;
+  try{
+    r = await api.read(p);
+  }catch(e){
+    abortDoc(d, '가져오기 실패: ' + clean(e));
+    msg(clean(e), true);
+    openDlg();
+    return;
+  }
+  d.size = r.size;
+  await parseInto(d, r.text);
+}
+
+/* ---- 원격 탭 다시읽기 (접속 중일 때만) ---- */
+remoteReload = async d => {
+  if(!connected){
+    reloadMsg('SFTP에 연결되어 있지 않습니다 — [FTP 가져오기]에서 먼저 접속하세요', true);
+    return;
+  }
+  const p = d.src.path;
+  const b = restartDoc(d, '다시 내려받는 중…');
+  let r;
+  try{
+    r = await api.read(p);
+  }catch(e){
+    const why = '다시읽기 실패: ' + clean(e);
+    abortDoc(b, why);
+    reloadMsg(why, true);
+    msg(clean(e), true);
+    return;
+  }
+  b.size = r.size;
+  await parseInto(b, r.text);
+  if(b.ready) reloadMsg('다시 읽었습니다 · ' + bytes(b.size) + ' · ' + nf(L.n) + '줄');
+};
+
+/* ---- 다운로드 진행률 ---- */
+api.onProgress(d => {
+  const r = d.total ? d.loaded / d.total : 0;
+  $('#prog i').style.width = (r * 100) + '%';
+  $('#progtxt').textContent = '다운로드 ' + bytes(d.loaded) +
+    (d.total ? ' / ' + bytes(d.total) + ' (' + Math.round(r * 100) + '%)' : '');
+});
+})();
+</script>
+</body>
+</html>

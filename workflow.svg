@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 190" width="640" height="190"
+     role="img" aria-labelledby="wfTitle wfDesc" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Noto Sans KR,sans-serif">
+  <title id="wfTitle">The four-step Callout9 workflow</title>
+  <desc id="wfDesc">Paste a screen, the AI writes the body, the tree becomes the outline, and it all builds into one Markdown file.</desc>
+
+  <style>
+    .card  { fill:#ffffff; stroke:#d5dbd8; }
+    .soft  { fill:#e2f0ec; }
+    .line  { stroke:#d5dbd8; stroke-width:2; stroke-linecap:round; fill:none; }
+    .ink   { stroke:#182220; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; fill:none; }
+    .acc   { stroke:#0d6b5f; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; fill:none; }
+    .accf  { fill:#0d6b5f; }
+    .num   { fill:#0a4f46; font-size:10px; font-weight:700; }
+    .cap   { fill:#6c7873; font-size:11px; text-anchor:middle; }
+    .arrow { stroke:#d5dbd8; stroke-width:2; stroke-linecap:round; fill:none; }
+  </style>
+
+  <!-- 1. Paste a screen -->
+  <g>
+    <rect class="card" x="8" y="16" width="126" height="96" rx="7"/>
+    <rect class="soft" x="8" y="16" width="126" height="20" rx="7"/>
+    <rect class="soft" x="8" y="29" width="126" height="7"/>
+    <circle class="accf" cx="20" cy="26" r="2.5"/>
+    <circle class="accf" cx="29" cy="26" r="2.5" opacity=".45"/>
+    <circle class="accf" cx="38" cy="26" r="2.5" opacity=".45"/>
+    <rect class="ink" x="34" y="50" width="74" height="46" rx="4"/>
+    <path class="ink" d="M34 84l17-16 13 12 11-9 19 17"/>
+    <circle class="acc" cx="60" cy="62" r="5"/>
+    <text class="num" x="16" y="47">1</text>
+    <text class="cap" x="71" y="130">Paste a screen</text>
+  </g>
+
+  <path class="arrow" d="M146 64h20m-6-5l6 5-6 5"/>
+
+  <!-- 2. The AI writes the body -->
+  <g>
+    <rect class="card" x="178" y="16" width="126" height="96" rx="7"/>
+    <path class="accf" d="M212 40l3.6 8.4 8.4 3.6-8.4 3.6-3.6 8.4-3.6-8.4-8.4-3.6 8.4-3.6z"/>
+    <path class="accf" d="M232 32l1.9 4.4 4.4 1.9-4.4 1.9-1.9 4.4-1.9-4.4-4.4-1.9 4.4-1.9z" opacity=".55"/>
+    <path class="line" d="M198 76h88M198 86h88M198 96h56"/>
+    <text class="num" x="186" y="47">2</text>
+    <text class="cap" x="241" y="130">The AI writes the body</text>
+  </g>
+
+  <path class="arrow" d="M316 64h20m-6-5l6 5-6 5"/>
+
+  <!-- 3. The tree becomes the outline -->
+  <g>
+    <rect class="card" x="348" y="16" width="126" height="96" rx="7"/>
+    <path class="line" d="M372 44v46h12M372 66h12M372 44h12"/>
+    <rect class="acc" x="360" y="36" width="16" height="14" rx="3" fill="#e2f0ec"/>
+    <rect class="ink" x="386" y="38" width="66" height="12" rx="3"/>
+    <rect class="ink" x="386" y="60" width="66" height="12" rx="3"/>
+    <rect class="acc" x="386" y="82" width="66" height="12" rx="3" fill="#e2f0ec"/>
+    <text class="num" x="356" y="112">3</text>
+    <text class="cap" x="411" y="130">The tree becomes the outline</text>
+  </g>
+
+  <path class="arrow" d="M486 64h20m-6-5l6 5-6 5"/>
+
+  <!-- 4. One Markdown file -->
+  <g>
+    <rect class="card" x="518" y="16" width="114" height="96" rx="7"/>
+    <path class="ink" d="M552 36h30l16 16v42a4 4 0 0 1-4 4h-42a4 4 0 0 1-4-4V40a4 4 0 0 1 4-4z"/>
+    <path class="ink" d="M582 36v16h16"/>
+    <path class="acc" d="M560 78v-12l6 7 6-7v12M578 66v12h8"/>
+    <text class="num" x="526" y="47">4</text>
+    <text class="cap" x="575" y="130">One Markdown file</text>
+  </g>
+</svg>
