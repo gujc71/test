@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JAVA 라이브러리 수명주기 점검</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{
+  --bg:#eef1f4; --surface:#ffffff; --ink:#18202c; --muted:#5b6778; --line:#d6dce4; --line-soft:#e7ebf0;
+  --accent:#1f5ea8; --accent-ink:#ffffff;
+  --eol:#c0362c; --eol-bg:#fbe8e6;
+  --eom:#b86a00; --eom-bg:#fdf0dc;
+  --ok:#1d7a4c; --ok-bg:#e3f3ea;
+  --unk:#7a8494; --unk-bg:#eceff3;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Consolas,monospace;
+}
+/* 테마: data-theme 이 없으면 OS 설정을 따르고, 있으면 그 값을 강제한다 */
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#11161d; --surface:#18202a; --ink:#e4e9f0; --muted:#94a0b1; --line:#2c3643; --line-soft:#232c37;
+    --accent:#5b9be6; --accent-ink:#0d1520;
+    --eol:#ef6f63; --eol-bg:#3a1d1b;
+    --eom:#e9a13b; --eom-bg:#372812;
+    --ok:#4fc28a; --ok-bg:#15301f;
+    --unk:#8d97a6; --unk-bg:#242c37;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#11161d; --surface:#18202a; --ink:#e4e9f0; --muted:#94a0b1; --line:#2c3643; --line-soft:#232c37;
+  --accent:#5b9be6; --accent-ink:#0d1520;
+  --eol:#ef6f63; --eol-bg:#3a1d1b;
+  --eom:#e9a13b; --eom-bg:#372812;
+  --ok:#4fc28a; --ok-bg:#15301f;
+  --unk:#8d97a6; --unk-bg:#242c37;
+  color-scheme:dark;
+}
+:root[data-theme="light"]{color-scheme:light}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55}
+a{color:var(--accent)}
+.wrap{max-width:1400px;margin:0 auto;padding:28px 24px 60px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;padding-bottom:20px;border-bottom:2px solid var(--ink)}
+h1{margin:0;font-size:26px;font-weight:700;letter-spacing:-.01em}
+.sub{margin:4px 0 0;color:var(--muted);font-size:14px}
+.btn{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:9px 16px;border-radius:6px;cursor:pointer}
+.btn:hover{border-color:var(--ink)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,.seg:focus-visible,th:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.folder-info{font-size:13px;color:var(--muted);margin-top:6px;text-align:right}
+
+.settings{margin-top:18px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+.settings summary{cursor:pointer;padding:12px 16px;font-weight:600;font-size:14px}
+.settings .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px 24px;padding:4px 16px 16px}
+.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
+.field input[type=number],.field input[type=text]{width:100%;font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.check{display:flex;gap:8px;align-items:flex-start;font-size:14px}
+.check input{margin-top:4px}
+.hint{font-size:12px;color:var(--muted);margin-top:4px}
+
+.progress{margin-top:18px;display:none}
+.progress.on{display:block}
+.progress .row{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:6px}
+.bar{height:6px;background:var(--line-soft);border-radius:3px;overflow:hidden}
+.bar > i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+
+.banner{margin-top:16px;padding:12px 16px;border-left:4px solid var(--eom);background:var(--eom-bg);border-radius:4px;font-size:14px;display:none}
+.banner.on{display:block}
+
+/* 상태 분포 막대 — 이 도구의 핵심 요약 */
+.dist{margin-top:26px;display:none}
+.dist.on{display:block}
+.dist-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.dist-head strong{font-size:18px}
+.dist-head span{font-size:13px;color:var(--muted)}
+.stack{display:flex;height:44px;border-radius:6px;overflow:hidden;border:1px solid var(--line);background:var(--surface)}
+.seg{border:0;padding:0 10px;font:inherit;font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden;cursor:pointer;min-width:0;color:var(--ink)}
+.seg.eol{background:var(--eol);color:#fff}
+.seg.eol-est{background:repeating-linear-gradient(135deg,var(--eol-bg) 0 6px,color-mix(in srgb,var(--eol) 28%,var(--eol-bg)) 6px 12px);color:var(--eol)}
+.seg.eom{background:var(--eom);color:#fff}
+.seg.eom-est{background:repeating-linear-gradient(135deg,var(--eom-bg) 0 6px,color-mix(in srgb,var(--eom) 28%,var(--eom-bg)) 6px 12px);color:var(--eom)}
+.seg.ok{background:var(--ok);color:#fff}
+.seg.ok-est{background:repeating-linear-gradient(135deg,var(--ok-bg) 0 6px,color-mix(in srgb,var(--ok) 25%,var(--ok-bg)) 6px 12px);color:var(--ok)}
+.seg.unk{background:var(--unk-bg);color:var(--unk)}
+.seg.active{box-shadow:inset 0 0 0 3px var(--ink)}
+.facts{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:12px;font-size:14px}
+.facts b{font-variant-numeric:tabular-nums}
+.facts button{font:inherit;background:none;border:0;padding:0;color:var(--ink);cursor:pointer;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.facts button:hover{text-decoration-color:var(--ink)}
+
+.toolbar{display:none;margin-top:22px;gap:10px;flex-wrap:wrap;align-items:center}
+.toolbar.on{display:flex}
+.toolbar input,.toolbar select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
+.toolbar input{flex:1;min-width:200px}
+.count{font-size:13px;color:var(--muted)}
+
+.table-wrap{margin-top:12px;overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;min-width:1180px;font-size:13.5px}
+th,td{padding:10px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line-soft)}
+th{position:sticky;top:0;background:var(--surface);font-size:12.5px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--line);cursor:pointer;user-select:none;white-space:nowrap}
+th[data-sort]:hover{color:var(--ink)}
+th .arrow{font-size:10px;margin-left:4px}
+tr:last-child td{border-bottom:0}
+tbody tr{border-left:4px solid transparent}
+tbody tr.r-eol{border-left-color:var(--eol)}
+tbody tr.r-eom{border-left-color:var(--eom)}
+tbody tr.r-ok{border-left-color:var(--ok)}
+tbody tr.r-unk{border-left-color:var(--line)}
+.mono{font-family:var(--mono);font-size:12.5px}
+.lib-a{font-weight:600;word-break:break-all}
+.lib-g{color:var(--muted);word-break:break-all}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;white-space:nowrap}
+.badge.eol{background:var(--eol);color:#fff}
+.badge.eom{background:var(--eom);color:#fff}
+.badge.ok{background:var(--ok);color:#fff}
+.badge.unk{background:var(--unk-bg);color:var(--unk)}
+.badge.est{background:transparent;border:1.5px dashed currentColor}
+.badge.est.eol{color:var(--eol)} .badge.est.eom{color:var(--eom)} .badge.est.ok{color:var(--ok)}
+.upd{font-size:12px;margin-top:3px}
+.upd.major{color:var(--eol);font-weight:600}
+.upd.minor{color:var(--eom)}
+.upd.latest{color:var(--ok)}
+.vuln a{display:inline-block;margin:0 4px 2px 0}
+.vcount{font-weight:700;color:var(--eol)}
+.none{color:var(--muted)}
+.note{color:var(--muted);font-size:12.5px;max-width:320px}
+.basis{font-size:12px;color:var(--muted)}
+.path{color:var(--muted);word-break:break-all;max-width:260px}
+.empty{padding:48px 20px;text-align:center;color:var(--muted)}
+.empty strong{display:block;color:var(--ink);font-size:16px;margin-bottom:6px}
+
+details.info{margin-top:18px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+details.info summary{cursor:pointer;padding:12px 16px;font-weight:600;font-size:14px}
+details.info .body{padding:0 16px 16px;font-size:14px}
+details.info dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0}
+details.info dt{font-weight:600}
+details.info dd{margin:0;color:var(--muted)}
+#log{font-family:var(--mono);font-size:12px;max-height:280px;overflow:auto;white-space:pre-wrap;margin:0;color:var(--muted)}
+#log .warn{color:var(--eom)} #log .err{color:var(--eol)} #log .ok{color:var(--ok)}
+@media (max-width:640px){ .wrap{padding:20px 14px 40px} h1{font-size:22px} .folder-info{text-align:left} }
+@media (prefers-reduced-motion:reduce){ .bar > i{transition:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>JAVA 라이브러리 수명주기 점검</h1>
+      <p class="sub">폴더 안의 JAR/WAR를 분석해 지원 종료(EOM·EOS·EOL), 보안 취약점(CVE)과 최신 버전을 확인합니다.</p>
+    </div>
+    <div>
+      <div class="actions">
+        <label class="btn primary" for="dirInput" tabindex="0" id="pickLabel">폴더 선택</label>
+        <input type="file" id="dirInput" webkitdirectory directory multiple hidden>
+        <button class="btn" id="rerun" disabled>다시 점검</button>
+        <button class="btn" id="themeToggle" type="button" aria-pressed="false" title="다크 모드로 전환">🌙 다크</button>
+      </div>
+      <div class="folder-info" id="folderInfo">선택된 폴더 없음</div>
+    </div>
+  </header>
+
+  <details class="settings">
+    <summary>점검 옵션</summary>
+    <div class="grid">
+      <div class="field">
+        <label for="eolYears">EOL 추정 기준 (마지막 릴리스 후 경과 연수)</label>
+        <input type="number" id="eolYears" value="3" min="1" max="20" step="0.5">
+        <div class="hint">프로젝트 전체에 이 기간 동안 새 릴리스가 없으면 EOL로 추정합니다.</div>
+      </div>
+      <div class="field">
+        <label for="eomYears">EOM 추정 기준 (구 메이저 라인 경과 연수)</label>
+        <input type="number" id="eomYears" value="2" min="0.5" max="20" step="0.5">
+        <div class="hint">사용 중인 메이저 라인에 이 기간 동안 릴리스가 없고 더 새 메이저가 있으면 EOM으로 추정합니다.</div>
+      </div>
+      <div class="field">
+        <label class="check"><input type="checkbox" id="optInner" checked> WAR / Spring Boot fat JAR 내부 라이브러리도 분석 (WEB-INF/lib, BOOT-INF/lib)</label>
+        <label class="check" style="margin-top:8px"><input type="checkbox" id="optVuln" checked> 알려진 보안 취약점 조회 (OSV)</label>
+      </div>
+    </div>
+  </details>
+
+  <div class="progress" id="progress">
+    <div class="row"><span id="phase">준비 중</span><span id="pcount"></span></div>
+    <div class="bar"><i id="pbar"></i></div>
+  </div>
+
+  <div class="banner" id="banner"></div>
+
+  <section class="dist" id="dist" aria-label="지원 상태 분포">
+    <div class="dist-head"><strong id="distTitle"></strong><span>막대를 누르면 해당 상태만 표시합니다. 빗금은 릴리스 이력 기반 추정입니다.</span></div>
+    <div class="stack" id="stack"></div>
+    <div class="facts" id="facts"></div>
+  </section>
+
+  <div class="toolbar" id="toolbar">
+    <input type="search" id="q" placeholder="라이브러리명, groupId, 파일 경로 검색">
+    <select id="filter">
+      <option value="all">모든 상태</option>
+      <option value="EOL">EOL (공식)</option>
+      <option value="EOL_EST">EOL 추정</option>
+      <option value="EOM">EOM (공식)</option>
+      <option value="EOM_EST">EOM 추정</option>
+      <option value="SUPPORTED">지원 중</option>
+      <option value="ACTIVE_EST">활성 추정</option>
+      <option value="UNKNOWN">확인 불가</option>
+      <option value="_risk">EOL·EOM 전체 (추정 포함)</option>
+      <option value="_update">업데이트 가능</option>
+      <option value="_vuln">취약점 있음</option>
+    </select>
+    <button class="btn" id="csv">CSV 내보내기</button>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th data-sort="status">상태<span class="arrow"></span></th>
+        <th data-sort="name">라이브러리<span class="arrow"></span></th>
+        <th data-sort="v">현재 버전<span class="arrow"></span></th>
+        <th>동일 라인 최신</th>
+        <th data-sort="latest">최신 버전<span class="arrow"></span></th>
+        <th data-sort="latestDate">최신 릴리스일<span class="arrow"></span></th>
+        <th>EOM<br>(유지보수 종료)</th>
+        <th>EOS / EOL<br>(지원 종료)</th>
+        <th data-sort="vuln">취약점<span class="arrow"></span></th>
+        <th>판정 근거 · 비고</th>
+        <th data-sort="path">파일<span class="arrow"></span></th>
+      </tr></thead>
+      <tbody id="tbody"><tr><td colspan="11"><div class="empty"><strong>점검할 폴더를 선택하세요</strong>하위 폴더까지 포함해 .jar와 .war 파일을 모두 찾습니다. 파일은 내 PC에서만 검사하며, 외부 조회에는 SHA-1 해시와 라이브러리 좌표만 사용합니다.</div></td></tr></tbody>
+    </table>
+  </div>
+
+  <details class="info">
+    <summary>용어와 판정 기준</summary>
+    <div class="body">
+      <dl>
+        <dt>EOM</dt><dd>End of Maintenance. 기능 개선과 일반 버그 수정이 끝난 상태. 보안 패치는 계속 나올 수 있습니다.</dd>
+        <dt>EOS / EOL</dt><dd>End of Support / End of Life. 보안 패치를 포함한 모든 지원이 끝난 상태. 교체 대상입니다.</dd>
+        <dt>공식 판정</dt><dd>endoflife.date에 등록된 제품(Spring, Spring Boot, Tomcat, Hibernate, Log4j, Jetty, Netty, Kotlin 등)은 해당 버전 라인의 공식 지원 종료일로 판정합니다. 이미 EOL이 잘 알려진 라이브러리(Log4j 1.x, Commons HttpClient 3.x, Jackson 1.x 등)는 내장 목록으로 판정합니다.</dd>
+        <dt>추정 판정</dt><dd>공식 데이터가 없는 라이브러리는 Maven Central 릴리스 이력으로 추정합니다. 기준 연수는 점검 옵션에서 바꿀 수 있습니다. 추정 결과는 참고용이며, 중요한 라이브러리는 공식 사이트에서 확인하세요.</dd>
+        <dt>라이브러리 식별</dt><dd>JAR 내부의 pom.properties를 우선 사용하고, 없으면 SHA-1 해시로 Maven Central을 조회하며, 그래도 없으면 파일명으로 추정합니다.</dd>
+        <dt>최신 버전</dt><dd>alpha·beta·RC·milestone·SNAPSHOT은 제외한 정식 릴리스 기준입니다. Guava의 -jre/-android처럼 변형이 있으면 같은 변형끼리 비교합니다.</dd>
+      </dl>
+    </div>
+  </details>
+
+  <details class="info">
+    <summary>진단 로그</summary>
+    <div class="body"><pre id="log"></pre></div>
+  </details>
+</div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const TODAY = new Date();
+const state = { files: [], rows: [], running: false, srcDown: {}, verCache: new Map(), eolIndex: null, eolCache: new Map(),
+  cfg: null, sort: { key: 'status', dir: 1 }, renderQueued: false };
+
+/* ---------------- 로그 / 진행 ---------------- */
+function log(msg, level = 'info') {
+  const el = document.createElement('div');
+  el.className = level;
+  el.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  $('#log').appendChild(el);
+  if (level !== 'info') console.warn(msg);
+}
+function progress(phase, done, total) {
+  $('#progress').classList.add('on');
+  $('#phase').textContent = phase;
+  $('#pcount').textContent = total ? `${done} / ${total}` : '';
+  $('#pbar').style.width = total ? `${Math.round(done / total * 100)}%` : '0%';
+}
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function fmtDate(d) {
+  if (!d) return '';
+  if (typeof d === 'string') return d;
+  if (isNaN(d)) return '';
+  return d.toISOString().slice(0, 10);
+}
+const yearsSince = d => (TODAY - d) / (365.25 * 864e5);
+
+/* ---------------- 네트워크 ---------------- */
+const TAURI_INVOKE = (() => {
+  const w = typeof window !== 'undefined' ? window : null;
+  return w?.__TAURI__?.core?.invoke || w?.__TAURI_INTERNALS__?.invoke || null;
+})();
+const IS_TAURI = !!TAURI_INVOKE;
+const NO_BODY_STATUS = new Set([101, 204, 205, 304]);
+
+// 데스크톱(Tauri) 모드: 웹뷰 fetch 대신 Rust 네이티브 HTTP 클라이언트로 요청한다. CORS 제약이 없다.
+async function nativeFetch(url, opts = {}) {
+  let res;
+  try {
+    res = await TAURI_INVOKE('native_fetch', {
+      url,
+      method: opts.method || 'GET',
+      body: opts.body == null ? null : String(opts.body),
+      contentType: opts.headers?.['Content-Type'] || null,
+    });
+  } catch (e) {
+    // 네트워크 오류는 브라우저 fetch와 같은 형태(TypeError)로 올려 소스 비활성화 로직을 그대로 재사용한다.
+    throw new TypeError(typeof e === 'string' ? e : (e?.message || '네이티브 요청 실패'));
+  }
+  const body = NO_BODY_STATUS.has(res.status) ? null : res.body;
+  return new Response(body, { status: res.status, headers: { 'Content-Type': res.contentType } });
+}
+
+async function xfetch(url, opts = {}) {
+  const r = IS_TAURI ? await nativeFetch(url, opts) : await fetch(url, opts);
+  if (!r.ok) { const e = new Error(`HTTP ${r.status}`); e.status = r.status; throw e; }
+  return r;
+}
+function markDown(name, e) {
+  // TypeError = CORS 차단 또는 네트워크 오류. 반복 호출을 막기 위해 해당 소스를 비활성화
+  if (e instanceof TypeError) {
+    if (!state.srcDown[name]) log(`${name} 접근 실패 (CORS 차단 또는 네트워크 오류): ${e.message}`, 'warn');
+    state.srcDown[name] = true;
+  }
+}
+async function pool(items, n, fn) {
+  let idx = 0;
+  const workers = Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (idx < items.length) { const i = idx++; await fn(items[i], i); }
+  });
+  await Promise.all(workers);
+}
+
+/* ---------------- 버전 비교 (Maven ComparableVersion 간략 구현) ---------------- */
+const QUAL = { alpha: 1, a: 1, beta: 2, b: 2, milestone: 3, m: 3, rc: 4, cr: 4, snapshot: 5, '': 6, ga: 6, final: 6, release: 6, sp: 7 };
+const PRE = new Set(['alpha', 'a', 'beta', 'b', 'rc', 'cr', 'm', 'milestone', 'snapshot', 'preview', 'ea', 'dev', 'pre']);
+function tokenize(v) {
+  return String(v).toLowerCase()
+    .replace(/([0-9])([a-z])/g, '$1.$2').replace(/([a-z])([0-9])/g, '$1.$2')
+    .split(/[.\-_+]/).filter(t => t !== '')
+    .map(t => /^\d+$/.test(t) ? Number(t) : t);
+}
+function cmpTok(a, b) {
+  const an = typeof a === 'number', bn = typeof b === 'number';
+  if (an && bn) return a - b;
+  if (an) return 1;
+  if (bn) return -1;
+  const ra = QUAL[a] ?? 6.5, rb = QUAL[b] ?? 6.5;
+  if (ra !== rb) return ra - rb;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+function cmpVer(x, y) {
+  const a = tokenize(x), b = tokenize(y), n = Math.max(a.length, b.length);
+  for (let i = 0; i < n; i++) {
+    let ta = a[i], tb = b[i];
+    if (ta === undefined) ta = typeof tb === 'number' ? 0 : '';
+    if (tb === undefined) tb = typeof ta === 'number' ? 0 : '';
+    const c = cmpTok(ta, tb);
+    if (c) return c < 0 ? -1 : 1;
+  }
+  return 0;
+}
+const isPre = v => tokenize(v).some(t => typeof t === 'string' && PRE.has(t));
+const isDateLike = v => { const t = tokenize(v)[0]; return typeof t === 'number' && t >= 10000000; };
+function flavor(v) {
+  const s = tokenize(v).filter(t => typeof t === 'string' && !(t in QUAL) && !PRE.has(t));
+  return s.length ? s[s.length - 1] : null;
+}
+function majorKey(v) {
+  const t = tokenize(v);
+  if (t[0] === 0 && typeof t[1] === 'number') return `0.${t[1]}`;
+  return String(t[0] ?? '');
+}
+function pickLatest(list, cur) {
+  const curDate = cur && isDateLike(cur), curFl = cur && flavor(cur);
+  let stable = list.filter(x => x.v && !isPre(x.v) && (curDate || !isDateLike(x.v)));
+  if (curFl) { const f = stable.filter(x => flavor(x.v) === curFl); if (f.length) stable = f; }
+  stable.sort((a, b) => cmpVer(a.v, b.v));
+  const latest = stable[stable.length - 1] || null;
+  const mk = cur ? majorKey(cur) : null;
+  const line = stable.filter(x => majorKey(x.v) === mk);
+  return { stable, latest, line: line[line.length - 1] || null };
+}
+function updateKind(cur, latest) {
+  if (!cur || !latest) return null;
+  const c = cmpVer(cur, latest);
+  if (c === 0) return 'latest';
+  if (c > 0) return 'ahead';
+  return majorKey(cur) !== majorKey(latest) ? 'major' : 'minor';
+}
+
+/* ---------------- JAR 분석 ---------------- */
+function parseProps(txt) {
+  const o = {};
+  for (const line of txt.split(/\r?\n/)) {
+    const m = line.match(/^\s*([^#!=:\s]+)\s*[=:]\s*(.*)$/);
+    if (m) o[m[1]] = m[2].trim();
+  }
+  return o;
+}
+function parseManifest(txt) {
+  const o = {}; let last = null;
+  for (const line of txt.split(/\r?\n/)) {
+    if (line.startsWith(' ') && last) { o[last] += line.slice(1); continue; }
+    const i = line.indexOf(':');
+    if (i > 0) { last = line.slice(0, i).trim(); o[last] = line.slice(i + 1).trim(); }
+  }
+  return o;
+}
+function parseFileName(name) {
+  const base = name.replace(/\.(jar|war)$/i, '');
+  const m = base.match(/^(.+?)-(\d+(?:\.\d+)*(?:[.\-][A-Za-z0-9]+)*)$/);
+  return m ? { a: m[1], v: m[2] } : null;
+}
+async function inspectJar(buf, name) {
+  const info = { pom: null, shaded: false, manifest: {}, inner: [] };
+  let zip;
+  try { zip = await JSZip.loadAsync(buf); } catch (e) { info.error = 'ZIP 형식이 아니거나 손상된 파일'; return info; }
+  const parsed = [];
+  for (const f of zip.file(/^META-INF\/maven\/[^/]+\/[^/]+\/pom\.properties$/)) {
+    const p = parseProps(await f.async('string'));
+    if (p.groupId && p.artifactId && p.version) parsed.push(p);
+  }
+  const base = name.replace(/\.(jar|war)$/i, '').toLowerCase();
+  info.pom = parsed.find(p => base === `${p.artifactId}-${p.version}`.toLowerCase())
+    || parsed.find(p => base.startsWith(p.artifactId.toLowerCase() + '-'))
+    || parsed[0] || null;
+  info.shaded = parsed.length > 1;
+  const mf = zip.file('META-INF/MANIFEST.MF');
+  if (mf) info.manifest = parseManifest(await mf.async('string'));
+  info.inner = zip.file(/^(BOOT-INF|WEB-INF)\/lib\/[^/]+\.jar$/);
+  return info;
+}
+async function sha1(buf) {
+  if (!globalThis.crypto?.subtle) return null;
+  const h = new Uint8Array(await crypto.subtle.digest('SHA-1', buf));
+  let bin = ''; h.forEach(b => bin += String.fromCharCode(b));
+  return { hex: [...h].map(b => b.toString(16).padStart(2, '0')).join(''), b64: btoa(bin) };
+}
+async function lookupBySha1(buf) {
+  let h;
+  try { h = await sha1(buf); } catch { return null; }
+  if (!h) return null;
+  if (!state.srcDown['deps.dev']) {
+    try {
+      const j = await (await xfetch(`https://api.deps.dev/v3/query?hash.type=SHA1&hash.value=${encodeURIComponent(h.b64)}`)).json();
+      const k = (j.results || []).map(x => x.version?.versionKey).find(k => k && k.system === 'MAVEN');
+      if (k) { const [g, a] = k.name.split(':'); return { g, a, v: k.version }; }
+    } catch (e) { markDown('deps.dev', e); }
+  }
+  if (!state.srcDown['Maven Central Search']) {
+    try {
+      const j = await (await xfetch(`https://search.maven.org/solrsearch/select?q=${encodeURIComponent(`1:"${h.hex}"`)}&rows=1&wt=json`)).json();
+      const d = j.response?.docs?.[0];
+      if (d) return { g: d.g, a: d.a, v: d.v };
+    } catch (e) { markDown('Maven Central Search', e); }
+  }
+  return null;
+}
+async function guessGroup(a, v) {
+  if (state.srcDown['Maven Central Search']) return null;
+  try {
+    const q = encodeURIComponent(`a:"${a}" AND v:"${v}"`);
+    const j = await (await xfetch(`https://search.maven.org/solrsearch/select?q=${q}&core=gav&rows=20&wt=json`)).json();
+    const gs = [...new Set((j.response?.docs || []).map(d => d.g))];
+    return gs.length ? { g: gs[0], multiple: gs.length > 1 } : null;
+  } catch (e) { markDown('Maven Central Search', e); return null; }
+}
+async function identify(buf, name, path, out, allowInner) {
+  const info = await inspectJar(buf, name);
+  const e = { path, name, g: null, a: null, v: null, idBy: '-', notes: [] };
+  if (info.error) e.notes.push(info.error);
+  if (info.pom) {
+    Object.assign(e, { g: info.pom.groupId, a: info.pom.artifactId, v: info.pom.version, idBy: 'pom.properties' });
+    if (info.shaded) e.notes.push('여러 pom.properties 포함 (shaded/uber JAR 가능)');
+  } else if (!info.error) {
+    const hit = await lookupBySha1(buf);
+    if (hit) Object.assign(e, hit, { idBy: 'SHA-1 해시' });
+    else {
+      const fn = parseFileName(name);
+      const mv = info.manifest['Implementation-Version'] || info.manifest['Bundle-Version'];
+      if (fn) {
+        Object.assign(e, { a: fn.a, v: fn.v, idBy: '파일명' });
+        const gg = await guessGroup(fn.a, fn.v);
+        if (gg) { e.g = gg.g; e.idBy = '파일명 + 검색 (추정)'; if (gg.multiple) e.notes.push('같은 이름의 groupId가 여러 개 있어 첫 번째로 추정'); }
+        else e.notes.push('groupId를 확인할 수 없음');
+      } else if (mv) {
+        Object.assign(e, { a: info.manifest['Implementation-Title'] || info.manifest['Bundle-SymbolicName'] || name, v: mv, idBy: 'MANIFEST.MF' });
+        e.notes.push('groupId를 확인할 수 없음');
+      }
+    }
+  }
+  if (info.inner.length) { e.container = true; e.notes.push(`내부 라이브러리 ${info.inner.length}개 포함`); }
+  out.push(e);
+  if (allowInner && state.cfg.inner && info.inner.length) {
+    for (const f of info.inner) {
+      try {
+        const b = await f.async('arraybuffer');
+        await identify(b, f.name.split('/').pop(), `${path}!/${f.name}`, out, false);
+      } catch (err) { log(`${path}!/${f.name} 읽기 실패: ${err.message}`, 'err'); }
+    }
+  }
+}
+
+/* ---------------- 버전 목록 조회 ---------------- */
+async function fromDepsDev(g, a) {
+  const j = await (await xfetch(`https://api.deps.dev/v3/systems/maven/packages/${encodeURIComponent(`${g}:${a}`)}`)).json();
+  return { versions: (j.versions || []).map(x => ({ v: x.versionKey?.version, date: x.publishedAt ? new Date(x.publishedAt) : null })) };
+}
+async function fromSolr(g, a) {
+  const q = encodeURIComponent(`g:"${g}" AND a:"${a}"`);
+  const j = await (await xfetch(`https://search.maven.org/solrsearch/select?q=${q}&core=gav&rows=500&wt=json`)).json();
+  return { versions: (j.response?.docs || []).map(d => ({ v: d.v, date: d.timestamp ? new Date(d.timestamp) : null })) };
+}
+async function fromMetadata(g, a) {
+  const txt = await (await xfetch(`https://repo1.maven.org/maven2/${g.replace(/\./g, '/')}/${a}/maven-metadata.xml`)).text();
+  const xml = new DOMParser().parseFromString(txt, 'application/xml');
+  const versions = [...xml.querySelectorAll('versions > version')].map(n => ({ v: n.textContent.trim(), date: null }));
+  const lu = xml.querySelector('lastUpdated')?.textContent?.trim();
+  const lastUpdated = lu && /^\d{14}$/.test(lu) ? new Date(`${lu.slice(0, 4)}-${lu.slice(4, 6)}-${lu.slice(6, 8)}T00:00:00Z`) : null;
+  return { versions, lastUpdated };
+}
+const SOURCES = [['deps.dev', fromDepsDev], ['Maven Central Search', fromSolr], ['maven-metadata.xml', fromMetadata]];
+async function fetchVersions(g, a) {
+  let fallback = null;
+  for (const [name, fn] of SOURCES) {
+    if (state.srcDown[name]) continue;
+    try {
+      const res = await fn(g, a);
+      if (!res.versions.length) continue;
+      res.source = name;
+      if (res.versions.some(x => x.date)) return res;   // 날짜가 있는 결과를 우선
+      fallback = fallback || res;
+    } catch (e) { markDown(name, e); }
+  }
+  return fallback;
+}
+function getVersions(g, a) {
+  const k = `${g}:${a}`;
+  if (!state.verCache.has(k)) state.verCache.set(k, fetchVersions(g, a));
+  return state.verCache.get(k);
+}
+
+/* ---------------- 공식 EOL 데이터 (endoflife.date) ---------------- */
+const EOL_MAP = [
+  { t: (g) => g === 'org.springframework', slugs: ['spring-framework'] },
+  { t: (g) => g === 'org.springframework.boot', slugs: ['spring-boot'] },
+  { t: (g) => g === 'org.springframework.security', slugs: ['spring-security'] },
+  { t: (g) => g === 'org.apache.tomcat.embed' || g === 'org.apache.tomcat', slugs: ['tomcat'] },
+  { t: (g, a) => (g === 'org.hibernate' || g === 'org.hibernate.orm') && /^hibernate-/.test(a), slugs: ['hibernate', 'hibernate-orm'] },
+  { t: (g) => g === 'org.apache.logging.log4j', slugs: ['log4j'] },
+  { t: (g) => g.startsWith('org.eclipse.jetty'), slugs: ['eclipse-jetty', 'jetty'] },
+  { t: (g) => g === 'io.netty', slugs: ['netty'] },
+  { t: (g) => g.startsWith('io.quarkus'), slugs: ['quarkus-framework', 'quarkus'] },
+  { t: (g) => g.startsWith('io.micronaut'), slugs: ['micronaut'] },
+  { t: (g) => g === 'org.apache.kafka', slugs: ['apache-kafka'] },
+  { t: (g) => g === 'org.apache.camel', slugs: ['apache-camel'] },
+  { t: (g) => g === 'org.apache.groovy' || g === 'org.codehaus.groovy', slugs: ['apache-groovy', 'groovy'] },
+  { t: (g, a) => g === 'org.jetbrains.kotlin' && a.startsWith('kotlin-stdlib'), slugs: ['kotlin'] },
+  { t: (g) => g.startsWith('org.elasticsearch') || g === 'co.elastic.clients', slugs: ['elasticsearch'] },
+  { t: (g) => g === 'org.apache.struts', slugs: ['apache-struts', 'struts'] },
+  { t: (g) => g === 'org.apache.lucene', slugs: ['apache-lucene', 'lucene'] },
+  { t: (g) => g === 'org.apache.solr', slugs: ['apache-solr', 'solr'] },
+  { t: (g) => g.startsWith('org.apache.activemq'), slugs: ['apache-activemq', 'activemq'] },
+  { t: (g) => g === 'org.apache.hadoop', slugs: ['apache-hadoop', 'hadoop'] },
+  { t: (g) => g === 'org.apache.spark', slugs: ['apache-spark', 'spark'] },
+  { t: (g) => g === 'org.apache.flink', slugs: ['apache-flink', 'flink'] },
+  { t: (g) => g === 'org.apache.cassandra', slugs: ['apache-cassandra', 'cassandra'] },
+  { t: (g) => g.startsWith('org.wildfly'), slugs: ['wildfly'] },
+  { t: (g) => g === 'org.apache.poi', slugs: ['apache-poi'] },
+  { t: (g) => g === 'org.apache.httpcomponents' || g.startsWith('org.apache.httpcomponents.'), slugs: ['apache-httpcomponents'] },
+];
+async function loadEolIndex() {
+  if (state.eolIndex) return;
+  try {
+    const j = await (await xfetch('https://endoflife.date/api/all.json')).json();
+    state.eolIndex = new Set(j);
+    log(`endoflife.date 제품 ${j.length}개 로드`);
+  } catch (e) {
+    state.eolIndex = new Set();
+    log(`endoflife.date 목록 로드 실패: ${e.message}. 공식 EOL 판정 없이 추정만 사용합니다.`, 'warn');
+  }
+}
+function eolSlugFor(g, a) {
+  if (!g || !a || !state.eolIndex?.size) return null;
+  for (const m of EOL_MAP) if (m.t(g, a)) { const s = m.slugs.find(s => state.eolIndex.has(s)); if (s) return s; }
+  return null;
+}
+function getCycles(slug) {
+  if (!state.eolCache.has(slug)) {
+    state.eolCache.set(slug, xfetch(`https://endoflife.date/api/${slug}.json`).then(r => r.json())
+      .catch(e => { log(`endoflife.date/${slug} 조회 실패: ${e.message}`, 'warn'); return null; }));
+  }
+  return state.eolCache.get(slug);
+}
+function matchCycle(cycles, v) {
+  let best = null;
+  for (const c of cycles) {
+    const cy = String(c.cycle);
+    if (v === cy || v.startsWith(cy + '.') || v.startsWith(cy + '-')) {
+      if (!best || cy.length > String(best.cycle).length) best = c;
+    }
+  }
+  return best;
+}
+function evalCycles(cycles, v) {
+  if (!v || !Array.isArray(cycles) || !cycles.length) return null;
+  const c = matchCycle(cycles, v);
+  if (!c) {
+    const oldest = cycles.map(x => String(x.cycle)).sort(cmpVer)[0];
+    if (oldest && cmpVer(v, oldest) < 0)
+      return { status: 'EOL', eol: '종료', eom: '종료', note: `공식 추적 대상 중 가장 오래된 ${oldest}보다 이전 버전` };
+    return null;
+  }
+  const out = { cycle: c.cycle, note: `버전 라인 ${c.cycle}` };
+  // eol: true=종료, false=진행 중, 문자열=날짜
+  const eolPassed = c.eol === true || (typeof c.eol === 'string' && new Date(c.eol) <= TODAY);
+  out.eol = typeof c.eol === 'string' ? c.eol : (c.eol === true ? '종료' : '미정');
+  // support: 문자열=활성 지원 종료일, 불리언은 판단 보류
+  const supPassed = typeof c.support === 'string' && new Date(c.support) <= TODAY;
+  out.eom = typeof c.support === 'string' ? c.support : '-';
+  if (eolPassed) out.status = 'EOL';
+  else if (supPassed) out.status = 'EOM';
+  else out.status = 'SUPPORTED';
+  if (typeof c.extendedSupport === 'string' && new Date(c.extendedSupport) > TODAY && out.status === 'EOL')
+    out.note += ` · 상용 연장 지원 ~${c.extendedSupport}`;
+  if (c.latest) out.note += ` · 라인 최신 ${c.latest}`;
+  return out;
+}
+
+/* ---------------- 널리 알려진 EOL 라이브러리 ---------------- */
+const KNOWN = [
+  { m: /^log4j:log4j$/, status: 'EOL', note: 'Log4j 1.x는 2015년 EOL. log4j-core 2.x 또는 reload4j로 교체' },
+  { m: /^commons-httpclient:commons-httpclient$/, status: 'EOL', note: 'Commons HttpClient 3.x는 EOL. httpclient 4.x / httpclient5로 교체' },
+  { m: /^org\.codehaus\.jackson:/, status: 'EOL', note: 'Jackson 1.x(codehaus)는 개발 종료. com.fasterxml.jackson 2.x로 교체' },
+  { m: /^struts:struts$/, status: 'EOL', note: 'Struts 1은 2013년 EOL' },
+  { m: /^dom4j:dom4j$/, status: 'EOL', note: '구 좌표. org.dom4j:dom4j로 이전됨' },
+  { m: /^velocity:velocity$/, status: 'EOL', note: '구 좌표. org.apache.velocity로 이전됨' },
+  { m: /^javax\.servlet:servlet-api$/, status: 'EOL', note: '구 좌표. javax.servlet-api 또는 jakarta.servlet-api로 교체' },
+  { m: /^commons-lang:commons-lang$/, status: 'EOM', note: 'commons-lang 2.x는 commons-lang3로 대체됨' },
+  { m: /^junit:junit$/, status: 'EOM', note: 'JUnit 4는 유지보수 모드. JUnit 5(Jupiter) 권장' },
+];
+
+/* ---------------- 판정 ---------------- */
+function heuristic(vi, cur, pk, cfg) {
+  const dated = pk.stable.filter(x => x.date && !isNaN(x.date));
+  const lastAll = dated.length ? new Date(Math.max(...dated.map(x => +x.date))) : (vi.lastUpdated || null);
+  const lineDated = dated.filter(x => majorKey(x.v) === majorKey(cur));
+  const lastLine = lineDated.length ? new Date(Math.max(...lineDated.map(x => +x.date))) : null;
+  const behind = pk.latest && majorKey(pk.latest.v) !== majorKey(cur) && cmpVer(pk.latest.v, cur) > 0;
+  if (!lastAll) return { status: 'UNKNOWN', note: '릴리스 날짜 정보가 없어 판정할 수 없음' };
+  const ya = yearsSince(lastAll);
+  if (ya > cfg.eolYears)
+    return { status: 'EOL_EST', eol: '추정', eom: '추정', note: `프로젝트 마지막 릴리스 ${fmtDate(lastAll)} (${ya.toFixed(1)}년 전)` };
+  if (behind) {
+    const mk = majorKey(cur), lk = majorKey(pk.latest.v);
+    if (!lastLine) return { status: 'EOM_EST', eom: '추정', note: `구 메이저 라인 (${mk}.x, 최신은 ${lk}.x)` };
+    const yl = yearsSince(lastLine);
+    if (yl > cfg.eomYears)
+      return { status: 'EOM_EST', eom: '추정', note: `${mk}.x 라인 마지막 릴리스 ${fmtDate(lastLine)} (${yl.toFixed(1)}년 전), 최신은 ${lk}.x` };
+    return { status: 'ACTIVE_EST', note: `구 메이저 라인이지만 ${fmtDate(lastLine)}에도 릴리스됨` };
+  }
+  return { status: 'ACTIVE_EST', note: `최근 릴리스 ${fmtDate(lastAll)}` };
+}
+async function evaluate(e) {
+  const r = Object.assign(e, { status: 'UNKNOWN', basis: '-', eom: '-', eol: '-', latest: null, lineLatest: null, latestDate: null, update: null, src: null, vulns: e.vulns || null });
+  if (!e.g || !e.a || !e.v) {
+    r.basis = '식별 실패';
+    if (!e.notes.length) e.notes.push('라이브러리 정보를 확인할 수 없음');
+    return;
+  }
+  const vi = await getVersions(e.g, e.a);
+  let pk = null;
+  if (vi) {
+    pk = pickLatest(vi.versions, e.v);
+    r.latest = pk.latest?.v || null;
+    r.latestDate = pk.latest?.date || null;
+    r.lineLatest = pk.line?.v || null;
+    r.update = updateKind(e.v, r.latest);
+    r.src = vi.source;
+  }
+  const key = `${e.g}:${e.a}`;
+  const k = KNOWN.find(x => x.m.test(key));
+  if (k) {
+    r.status = k.status; r.basis = '알려진 EOL 목록';
+    if (k.status === 'EOL') { r.eol = '종료'; r.eom = '종료'; } else r.eom = '종료';
+    e.notes.unshift(k.note);
+    return;
+  }
+  const slug = eolSlugFor(e.g, e.a);
+  if (slug) {
+    const cycles = await getCycles(slug);
+    const ev = evalCycles(cycles, e.v);
+    if (ev) {
+      r.status = ev.status; r.eol = ev.eol; r.eom = ev.eom; r.basis = `endoflife.date/${slug}`;
+      e.notes.unshift(ev.note);
+      return;
+    }
+  }
+  if (!vi) {
+    r.basis = 'Maven Central 미등록';
+    e.notes.push('Maven Central에서 찾을 수 없음 (사내·커스텀 라이브러리일 수 있음)');
+    return;
+  }
+  const h = heuristic(vi, e.v, pk, state.cfg);
+  r.status = h.status; r.basis = '릴리스 이력 추정';
+  if (h.eol) r.eol = h.eol;
+  if (h.eom) r.eom = h.eom;
+  e.notes.unshift(h.note);
+}
+
+/* ---------------- 취약점 (OSV) ---------------- */
+async function queryOSV(rows) {
+  const targets = rows.filter(r => r.g && r.a && r.v);
+  for (let i = 0; i < targets.length; i += 100) {
+    const chunk = targets.slice(i, i + 100);
+    try {
+      const body = JSON.stringify({ queries: chunk.map(r => ({ package: { ecosystem: 'Maven', name: `${r.g}:${r.a}` }, version: r.v })) });
+      const j = await (await xfetch('https://api.osv.dev/v1/querybatch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })).json();
+      (j.results || []).forEach((res, idx) => { chunk[idx].vulns = (res.vulns || []).map(v => v.id); });
+    } catch (e) {
+      log(`OSV 취약점 조회 실패: ${e.message}`, 'warn');
+      return false;
+    }
+    progress('취약점 조회', Math.min(i + 100, targets.length), targets.length);
+  }
+  return true;
+}
+
+/* ---------------- 실행 ---------------- */
+function readCfg() {
+  return {
+    eolYears: Number($('#eolYears').value) || 3,
+    eomYears: Number($('#eomYears').value) || 2,
+    inner: $('#optInner').checked,
+    vuln: $('#optVuln').checked,
+  };
+}
+async function run() {
+  if (state.running || !state.files.length) return;
+  state.running = true;
+  $('#rerun').disabled = true;
+  $('#banner').classList.remove('on');
+  state.cfg = readCfg();
+  state.srcDown = {}; state.verCache = new Map(); state.eolCache = new Map(); state.rows = [];
+  log(`점검 시작: 파일 ${state.files.length}개`);
+  try {
+    const rows = [];
+    let i = 0;
+    progress('JAR 분석', 0, state.files.length);
+    for (const f of state.files) {
+      const path = f.webkitRelativePath || f.name;
+      try { await identify(await f.arrayBuffer(), f.name, path, rows, true); }
+      catch (err) { rows.push({ path, name: f.name, g: null, a: null, v: null, idBy: '-', notes: [`읽기 실패: ${err.message}`] }); }
+      progress('JAR 분석', ++i, state.files.length);
+    }
+    state.rows = rows;
+    await loadEolIndex();
+
+    let done = 0;
+    progress('버전·지원 상태 조회', 0, rows.length);
+    await pool(rows, 6, async r => {
+      try { await evaluate(r); }
+      catch (err) { r.status = 'UNKNOWN'; r.notes.push(`조회 오류: ${err.message}`); log(`${r.path}: ${err.message}`, 'err'); }
+      progress('버전·지원 상태 조회', ++done, rows.length);
+      queueRender();
+    });
+
+    if (state.cfg.vuln) await queryOSV(rows);
+
+    const allDown = SOURCES.every(([n]) => state.srcDown[n]);
+    if (allDown) showBanner(IS_TAURI
+      ? 'Maven Central 관련 API에 모두 접근하지 못했습니다. 인터넷 연결 또는 사내 프록시·방화벽 설정을 확인하세요.'
+      : 'Maven Central 관련 API에 모두 접근하지 못했습니다. 브라우저가 CORS로 차단했을 가능성이 높습니다. 동봉된 데스크톱 앱(JAR Lifecycle Checker)으로 실행하면 프록시 없이 점검할 수 있습니다.');
+    else if (Object.keys(state.srcDown).length) log(`일부 소스 비활성화: ${Object.keys(state.srcDown).join(', ')} (다른 소스로 대체 조회함)`, 'warn');
+
+    progress('완료', rows.length, rows.length);
+    log(`점검 완료: 항목 ${rows.length}개`);
+  } catch (err) {
+    showBanner(`점검 중 오류가 발생했습니다: ${err.message}`);
+    log(err.stack || err.message, 'err');
+  } finally {
+    state.running = false;
+    $('#rerun').disabled = false;
+    render();
+  }
+}
+function showBanner(msg) { $('#banner').textContent = msg; $('#banner').classList.add('on'); }
+
+/* ---------------- 렌더링 ---------------- */
+const ST = {
+  EOL: { label: 'EOL', cls: 'eol', seg: 'eol', row: 'r-eol', rank: 0 },
+  EOL_EST: { label: 'EOL 추정', cls: 'eol est', seg: 'eol-est', row: 'r-eol', rank: 1 },
+  EOM: { label: 'EOM', cls: 'eom', seg: 'eom', row: 'r-eom', rank: 2 },
+  EOM_EST: { label: 'EOM 추정', cls: 'eom est', seg: 'eom-est', row: 'r-eom', rank: 3 },
+  SUPPORTED: { label: '지원 중', cls: 'ok', seg: 'ok', row: 'r-ok', rank: 4 },
+  ACTIVE_EST: { label: '활성 추정', cls: 'ok est', seg: 'ok-est', row: 'r-ok', rank: 5 },
+  UNKNOWN: { label: '확인 불가', cls: 'unk', seg: 'unk', row: 'r-unk', rank: 6 },
+};
+const UPD = { latest: ['latest', '최신'], minor: ['minor', '업데이트 가능'], major: ['major', '메이저 업데이트'], ahead: ['latest', '최신보다 높음'] };
+function queueRender() {
+  if (state.renderQueued) return;
+  state.renderQueued = true;
+  requestAnimationFrame(() => { state.renderQueued = false; render(); });
+}
+function filtered() {
+  const q = $('#q').value.trim().toLowerCase();
+  const f = $('#filter').value;
+  return state.rows.filter(r => {
+    if (!r.status) return false;
+    if (f === '_risk' && !['EOL', 'EOL_EST', 'EOM', 'EOM_EST'].includes(r.status)) return false;
+    if (f === '_update' && !['minor', 'major'].includes(r.update)) return false;
+    if (f === '_vuln' && !(r.vulns && r.vulns.length)) return false;
+    if (!f.startsWith('_') && f !== 'all' && r.status !== f) return false;
+    if (q && ![r.a, r.g, r.path, r.v].some(x => String(x || '').toLowerCase().includes(q))) return false;
+    return true;
+  });
+}
+function sortRows(rows) {
+  const { key, dir } = state.sort;
+  const val = r => {
+    switch (key) {
+      case 'status': return ST[r.status]?.rank ?? 9;
+      case 'name': return (r.a || r.name || '').toLowerCase();
+      case 'v': return r.v || '';
+      case 'latest': return r.latest || '';
+      case 'latestDate': return r.latestDate ? +r.latestDate : 0;
+      case 'vuln': return r.vulns ? r.vulns.length : -1;
+      case 'path': return r.path.toLowerCase();
+    }
+  };
+  return rows.slice().sort((a, b) => {
+    const x = val(a), y = val(b);
+    let c = (key === 'v' || key === 'latest') ? cmpVer(x || '0', y || '0') : (x < y ? -1 : x > y ? 1 : 0);
+    if (!c) c = (a.a || a.name).localeCompare(b.a || b.name);
+    return c * dir;
+  });
+}
+function renderDist() {
+  const rows = state.rows.filter(r => r.status);
+  if (!rows.length) { $('#dist').classList.remove('on'); $('#toolbar').classList.remove('on'); return; }
+  $('#dist').classList.add('on'); $('#toolbar').classList.add('on');
+  const counts = {}; rows.forEach(r => counts[r.status] = (counts[r.status] || 0) + 1);
+  const risk = (counts.EOL || 0) + (counts.EOL_EST || 0) + (counts.EOM || 0) + (counts.EOM_EST || 0);
+  $('#distTitle').textContent = `${rows.length}개 중 ${risk}개가 EOL 또는 EOM 상태입니다`;
+  const cur = $('#filter').value;
+  $('#stack').innerHTML = Object.entries(ST).filter(([k]) => counts[k]).map(([k, s]) =>
+    `<button class="seg ${s.seg}${cur === k ? ' active' : ''}" data-f="${k}" style="flex:${counts[k]}" title="${s.label} ${counts[k]}개">${counts[k] / rows.length > 0.06 ? `${esc(s.label)} ${counts[k]}` : counts[k]}</button>`).join('');
+  const upd = rows.filter(r => r.update === 'minor' || r.update === 'major').length;
+  const major = rows.filter(r => r.update === 'major').length;
+  const vul = rows.filter(r => r.vulns && r.vulns.length).length;
+  const vulChecked = rows.some(r => r.vulns);
+  $('#facts').innerHTML = [
+    `<button data-f="_update">업데이트 가능 <b>${upd}</b>개 (메이저 ${major})</button>`,
+    vulChecked ? `<button data-f="_vuln">알려진 취약점 보유 <b>${vul}</b>개</button>` : '',
+    `<button data-f="all">전체 보기</button>`,
+  ].join('');
+}
+function cellDate(v) {
+  if (!v || v === '-') return '<span class="none">-</span>';
+  const isDate = /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const passed = isDate && new Date(v) <= TODAY;
+  return isDate ? `<span class="mono"${passed ? ' style="color:var(--eol)"' : ''}>${esc(v)}</span>` : esc(v);
+}
+function render() {
+  renderDist();
+  const rows = sortRows(filtered());
+  $('#count').textContent = state.rows.length ? `${rows.length}개 표시` : '';
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.querySelector('.arrow').textContent = th.dataset.sort === state.sort.key ? (state.sort.dir > 0 ? '▲' : '▼') : '';
+  });
+  if (!state.rows.length) return;
+  if (!rows.length) { $('#tbody').innerHTML = `<tr><td colspan="11"><div class="empty"><strong>조건에 맞는 항목이 없습니다</strong>검색어나 상태 필터를 바꿔 보세요.</div></td></tr>`; return; }
+  $('#tbody').innerHTML = rows.map(r => {
+    const s = ST[r.status] || ST.UNKNOWN;
+    const u = r.update && UPD[r.update];
+    const mvn = r.g && r.a ? `https://central.sonatype.com/artifact/${encodeURIComponent(r.g)}/${encodeURIComponent(r.a)}` : null;
+    const vul = r.vulns == null ? '<span class="none">-</span>'
+      : !r.vulns.length ? '<span class="none">없음</span>'
+      : `<span class="vcount">${r.vulns.length}건</span><div class="vuln">${r.vulns.slice(0, 4).map(id => `<a class="mono" href="https://osv.dev/vulnerability/${encodeURIComponent(id)}" target="_blank" rel="noopener">${esc(id)}</a>`).join('')}${r.vulns.length > 4 ? `<span class="none">외 ${r.vulns.length - 4}건</span>` : ''}</div>`;
+    return `<tr class="${s.row}">
+      <td><span class="badge ${s.cls}">${s.label}</span></td>
+      <td><div class="lib-a">${mvn ? `<a href="${mvn}" target="_blank" rel="noopener">${esc(r.a)}</a>` : esc(r.a || r.name)}</div><div class="lib-g mono">${esc(r.g || '')}</div></td>
+      <td class="mono">${esc(r.v || '-')}</td>
+      <td class="mono">${r.lineLatest && r.lineLatest !== r.v ? esc(r.lineLatest) : '<span class="none">-</span>'}</td>
+      <td><span class="mono">${esc(r.latest || '-')}</span>${u ? `<div class="upd ${u[0]}">${u[1]}</div>` : ''}</td>
+      <td class="mono">${fmtDate(r.latestDate) || '<span class="none">-</span>'}</td>
+      <td>${cellDate(r.eom)}</td>
+      <td>${cellDate(r.eol)}</td>
+      <td>${vul}</td>
+      <td><div class="basis">${esc(r.basis)}${r.src ? ` · 버전 출처 ${esc(r.src)}` : ''} · 식별 ${esc(r.idBy)}</div><div class="note">${r.notes.map(esc).join('<br>')}</div></td>
+      <td class="path mono" title="${esc(r.path)}">${esc(r.path)}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ---------------- CSV ---------------- */
+function exportCSV() {
+  const head = ['상태', 'groupId', 'artifactId', '현재 버전', '동일 라인 최신', '최신 버전', '최신 릴리스일', '업데이트', 'EOM', 'EOS/EOL', '취약점 수', '취약점 ID', '판정 근거', '비고', '식별 방법', '파일 경로'];
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = [head.map(q).join(',')];
+  for (const r of sortRows(filtered())) {
+    lines.push([ST[r.status]?.label, r.g, r.a, r.v, r.lineLatest, r.latest, fmtDate(r.latestDate), r.update ? UPD[r.update][1] : '',
+      r.eom, r.eol, r.vulns ? r.vulns.length : '', r.vulns ? r.vulns.join(' ') : '', r.basis, r.notes.join(' / '), r.idBy, r.path].map(q).join(','));
+  }
+  const text = '\uFEFF' + lines.join('\r\n'); // BOM: \uC5D1\uC140\uC774 UTF-8 \uB85C \uC77D\uAC8C \uD55C\uB2E4
+  const name = `jar-lifecycle-${fmtDate(TODAY)}.csv`;
+
+  // \uB370\uC2A4\uD06C\uD1B1 \uC571: \uC6F9\uBDF0\uAC00 a[download] + blob: \uB2E4\uC6B4\uB85C\uB4DC\uB97C \uCC98\uB9AC\uD558\uC9C0 \uBABB\uD558\uBBC0\uB85C Rust \uAC00 \uC800\uC7A5\uD55C\uB2E4.
+  if (IS_TAURI) {
+    TAURI_INVOKE('save_text_file', { defaultName: name, contents: text })
+      .then(path => { if (path) log(`CSV \uC800\uC7A5 \uC644\uB8CC: ${path}`, 'ok'); })
+      .catch(e => log(`CSV \uC800\uC7A5 \uC2E4\uD328: ${e}`, 'err'));
+    return;
+  }
+
+  const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ---------------- 다크 모드 ---------------- */
+const THEME_KEY = 'jarInspector.theme';
+const darkMq = matchMedia('(prefers-color-scheme: dark)');
+function currentTheme() {
+  return document.documentElement.dataset.theme || (darkMq.matches ? 'dark' : 'light');
+}
+function applyTheme(t) {
+  if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+  const dark = currentTheme() === 'dark';
+  const b = $('#themeToggle');
+  b.textContent = dark ? '☀️ 라이트' : '🌙 다크';
+  b.title = dark ? '라이트 모드로 전환' : '다크 모드로 전환';
+  b.setAttribute('aria-pressed', String(dark));
+}
+let savedTheme = null;
+try { savedTheme = localStorage.getItem(THEME_KEY); } catch {}
+applyTheme(savedTheme);
+darkMq.addEventListener('change', () => applyTheme(null));
+$('#themeToggle').addEventListener('click', () => {
+  const next = currentTheme() === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  try { localStorage.setItem(THEME_KEY, next); } catch {}
+});
+
+/* ---------------- 폴더 선택 ---------------- */
+function setFolder(root, files) {
+  state.files = files;
+  $('#folderInfo').textContent = files.length
+    ? `${root} 폴더에서 JAR/WAR ${files.length}개 발견`
+    : `${root || '선택한'} 폴더에 JAR/WAR 파일이 없습니다`;
+  $('#rerun').disabled = !files.length;
+  if (files.length) run();
+}
+
+// 데스크톱 앱: 네이티브 폴더 선택 대화상자.
+// (웹뷰의 디렉터리 input 은 Chromium 이 "업로드" 확인창을 띄우므로 쓰지 않는다.)
+async function pickFolderNative() {
+  let pick;
+  try {
+    pick = await TAURI_INVOKE('pick_folder');
+  } catch (e) {
+    log(`폴더 선택 실패: ${e}`, 'err');
+    return;
+  }
+  if (!pick) return; // 취소
+  setFolder(pick.root, pick.files.map(f => ({
+    name: f.name,
+    webkitRelativePath: f.relPath,
+    arrayBuffer: async () => {
+      const r = await TAURI_INVOKE('read_file', { path: f.path });
+      if (r instanceof ArrayBuffer) return r;
+      if (ArrayBuffer.isView(r)) return r.buffer.slice(r.byteOffset, r.byteOffset + r.byteLength);
+      return new Uint8Array(r).buffer;
+    },
+  })));
+}
+
+/* ---------------- 이벤트 ---------------- */
+const openPicker = IS_TAURI ? pickFolderNative : () => $('#dirInput').click();
+if (IS_TAURI) {
+  $('#pickLabel').removeAttribute('for');
+  $('#pickLabel').addEventListener('click', openPicker);
+}
+$('#dirInput').addEventListener('change', e => {
+  const all = [...e.target.files];
+  const root = all[0]?.webkitRelativePath?.split('/')[0] || '';
+  setFolder(root, all.filter(f => /\.(jar|war)$/i.test(f.name)));
+  e.target.value = '';
+});
+$('#pickLabel').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(); } });
+$('#rerun').addEventListener('click', run);
+$('#q').addEventListener('input', render);
+$('#filter').addEventListener('change', render);
+$('#csv').addEventListener('click', exportCSV);
+// 데스크톱 앱: 웹뷰에는 새 창이 없어 target="_blank" 가 무시된다. OS 기본 브라우저로 넘긴다.
+if (IS_TAURI) {
+  document.addEventListener('click', e => {
+    const a = e.target.closest?.('a[href^="http"]');
+    if (!a) return;
+    e.preventDefault();
+    TAURI_INVOKE('open_external', { url: a.href })
+      .catch(err => log(`링크를 열지 못했습니다: ${err}`, 'err'));
+  });
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-f]');
+  if (b) { const f = b.dataset.f; $('#filter').value = $('#filter').value === f ? 'all' : f; render(); }
+});
+document.querySelectorAll('th[data-sort]').forEach(th => {
+  th.tabIndex = 0;
+  const go = () => { const k = th.dataset.sort; state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : 1 }; render(); };
+  th.addEventListener('click', go);
+  th.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+});
+
+if (typeof JSZip === 'undefined') showBanner('JSZip 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인하세요.');
+</script>
+</body>
+</html>
